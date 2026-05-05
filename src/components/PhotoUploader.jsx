@@ -1,13 +1,36 @@
 const PhotoUploader = ({ label, name, photos, setReportData }) => {
-  const handlePhotosChange = (event) => {
+  const convertFileToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        resolve(reader.result);
+      };
+
+      reader.onerror = () => {
+        reject(new Error("Error reading file"));
+      };
+
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handlePhotosChange = async (event) => {
     const files = Array.from(event.target.files);
 
-    const photoUrls = files.map((file) => URL.createObjectURL(file));
+    try {
+      const photoBase64List = await Promise.all(
+        files.map((file) => convertFileToBase64(file))
+      );
 
-    setReportData((prevData) => ({
-      ...prevData,
-      [name]: [...prevData[name], ...photoUrls],
-    }));
+      setReportData((prevData) => ({
+        ...prevData,
+        [name]: [...prevData[name], ...photoBase64List],
+      }));
+    } catch (error) {
+      alert("There was an error uploading the photos.");
+      console.error(error);
+    }
   };
 
   const handleRemovePhoto = (photoToRemove) => {
@@ -32,7 +55,7 @@ const PhotoUploader = ({ label, name, photos, setReportData }) => {
       {photos.length > 0 && (
         <div className="row g-2 mt-2">
           {photos.map((photo, index) => (
-            <div className="col-6" key={`${photo}-${index}`}>
+            <div className="col-6" key={`${photo.slice(0, 30)}-${index}`}>
               <div className="photo-thumb-wrapper">
                 <img
                   src={photo}

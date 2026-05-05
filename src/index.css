@@ -35,6 +35,16 @@ textarea {
   resize: vertical;
 }
 
+.form-label {
+  font-weight: 500;
+}
+
+.alert {
+  border-radius: 12px;
+}
+
+/* Report preview */
+
 .report-preview {
   min-height: 900px;
   border: 1px solid #dee2e6;
@@ -52,6 +62,8 @@ textarea {
   line-height: 1.6;
 }
 
+/* Photos inside the form */
+
 .photo-thumb-wrapper {
   background-color: #f8f9fa;
   padding: 8px;
@@ -68,6 +80,8 @@ textarea {
   padding: 4px;
 }
 
+/* Photos inside the PDF/report preview */
+
 .report-photo {
   width: 100%;
   max-height: 260px;
@@ -77,13 +91,34 @@ textarea {
   padding: 6px;
 }
 
-.form-label {
-  font-weight: 500;
+/* Saved reports page */
+
+.saved-report-card {
+  overflow: hidden;
 }
 
-.alert {
-  border-radius: 12px;
+.saved-report-photo-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  max-width: 100%;
+  overflow: hidden;
 }
+
+.saved-report-thumb {
+  display: block;
+  width: 64px !important;
+  height: 64px !important;
+  max-width: 64px !important;
+  max-height: 64px !important;
+  object-fit: cover;
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 3px;
+}
+
+/* Mobile */
 
 @media (max-width: 768px) {
   .d-flex.justify-content-between {
@@ -98,5 +133,9 @@ textarea {
 
   .report-preview {
     min-height: auto;
+  }
+
+  .card-body {
+    padding: 1rem;
   }
 }

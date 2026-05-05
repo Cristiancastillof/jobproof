@@ -23,6 +23,31 @@ const Reports = () => {
     setReports(updatedReports);
   };
 
+  const renderSmallPhotos = (photos) => {
+    if (!photos || photos.length === 0) {
+      return <small className="text-muted">No photos</small>;
+    }
+
+    return (
+      <div className="saved-report-photo-list">
+        {photos.slice(0, 3).map((photo, index) => (
+          <img
+            key={`${photo.slice(0, 20)}-${index}`}
+            src={photo}
+            alt={`Saved report photo ${index + 1}`}
+            className="saved-report-thumb"
+          />
+        ))}
+
+        {photos.length > 3 && (
+          <small className="text-muted align-self-center">
+            +{photos.length - 3} more
+          </small>
+        )}
+      </div>
+    );
+  };
+
   if (reports.length === 0) {
     return (
       <section>
@@ -43,7 +68,7 @@ const Reports = () => {
       <div className="row g-3">
         {reports.map((report) => (
           <div className="col-md-6 col-lg-4" key={report.id}>
-            <div className="card shadow-sm h-100">
+            <div className="card shadow-sm h-100 saved-report-card">
               <div className="card-body d-flex flex-column">
                 <h2 className="h5 mb-2">
                   {report.clientName || "Unnamed client"}
@@ -68,7 +93,7 @@ const Reports = () => {
                   {report.jobAddress || "No job address"}
                 </p>
 
-                <p className="small flex-grow-1">
+                <p className="small">
                   {report.workCompleted
                     ? report.workCompleted.slice(0, 120)
                     : "No work notes added."}
@@ -77,9 +102,21 @@ const Reports = () => {
                     : ""}
                 </p>
 
-                <div className="d-flex justify-content-between align-items-center mt-3">
+                <div className="mb-3">
+                  <strong className="small d-block mb-1">Before photos</strong>
+                  {renderSmallPhotos(report.beforePhotos)}
+                </div>
+
+                <div className="mb-3">
+                  <strong className="small d-block mb-1">After photos</strong>
+                  {renderSmallPhotos(report.afterPhotos)}
+                </div>
+
+                <div className="d-flex justify-content-between align-items-center mt-auto">
                   <small className="text-muted">
-                    {new Date(report.createdAt).toLocaleDateString()}
+                    {report.createdAt
+                      ? new Date(report.createdAt).toLocaleDateString()
+                      : "No saved date"}
                   </small>
 
                   <button
