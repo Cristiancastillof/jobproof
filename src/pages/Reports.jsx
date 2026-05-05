@@ -24,6 +24,17 @@ const Reports = () => {
     setReports(updatedReports);
   };
 
+  const handleClearAllReports = () => {
+    const confirmClear = window.confirm(
+      "Are you sure you want to delete all saved reports? This action cannot be undone."
+    );
+
+    if (!confirmClear) return;
+
+    localStorage.removeItem("jobproofReports");
+    setReports([]);
+  };
+
   const renderSmallPhotos = (photos) => {
     if (!photos || photos.length === 0) {
       return <small className="text-muted">No photos</small>;
@@ -52,7 +63,13 @@ const Reports = () => {
   if (reports.length === 0) {
     return (
       <section>
-        <h1 className="mb-4">Reports</h1>
+        <div className="d-flex justify-content-between align-items-center mb-4">
+          <h1 className="mb-0">Reports</h1>
+
+          <Link to="/create-report" className="btn btn-primary">
+            Create Report
+          </Link>
+        </div>
 
         <div className="alert alert-secondary">
           No saved reports yet. Create a report and click Save Report to see it
@@ -64,7 +81,28 @@ const Reports = () => {
 
   return (
     <section>
-      <h1 className="mb-4">Saved Reports</h1>
+      <div className="d-flex justify-content-between align-items-center mb-4">
+        <div>
+          <h1 className="mb-1">Saved Reports</h1>
+          <p className="text-muted mb-0">
+            You have {reports.length} saved report
+            {reports.length === 1 ? "" : "s"}.
+          </p>
+        </div>
+
+        <div className="d-flex gap-2 flex-wrap">
+          <Link to="/create-report" className="btn btn-primary">
+            Create Report
+          </Link>
+
+          <button
+            className="btn btn-outline-danger"
+            onClick={handleClearAllReports}
+          >
+            Clear All
+          </button>
+        </div>
+      </div>
 
       <div className="row g-3">
         {reports.map((report) => (
