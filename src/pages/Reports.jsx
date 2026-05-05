@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 const Reports = () => {
   const [reports, setReports] = useState([]);
@@ -119,12 +120,21 @@ const Reports = () => {
                       : "No saved date"}
                   </small>
 
-                  <button
-                    className="btn btn-sm btn-outline-danger"
-                    onClick={() => handleDeleteReport(report.id)}
-                  >
-                    Delete
-                  </button>
+                  <div className="d-flex gap-2">
+                    <Link
+                      to={`/reports/${report.id}`}
+                      className="btn btn-sm btn-primary"
+                    >
+                      View
+                    </Link>
+
+                    <button
+                      className="btn btn-sm btn-outline-danger"
+                      onClick={() => handleDeleteReport(report.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
