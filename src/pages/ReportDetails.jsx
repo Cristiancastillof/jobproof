@@ -49,11 +49,21 @@ const ReportDetails = () => {
             Back
           </Link>
 
+          <Link to={`/edit-report/${report.id}`} className="btn btn-primary">
+            Edit Report
+          </Link>
+
           <button className="btn btn-success" onClick={handleDownloadPDF}>
             Download PDF
           </button>
         </div>
       </div>
+
+      {report.updatedAt && (
+        <div className="alert alert-info">
+          Last updated: {new Date(report.updatedAt).toLocaleString()}
+        </div>
+      )}
 
       <ReportPreview reportData={report} />
     </section>

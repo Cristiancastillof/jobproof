@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import ReportForm from "../components/ReportForm";
 import ReportPreview from "../components/ReportPreview";
 import { generatePDF } from "../utils/generatePDF";
@@ -17,11 +18,35 @@ const initialReportData = {
 };
 
 const CreateReport = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+
+  const isEditMode = Boolean(id);
+
   const [reportData, setReportData] = useState(initialReportData);
   const [message, setMessage] = useState({
     type: "",
     text: "",
   });
+
+  useEffect(() => {
+    if (!isEditMode) return;
+
+    const savedReports =
+      JSON.parse(localStorage.getItem("jobproofReports")) || [];
+
+    const reportToEdit = savedReports.find((report) => report.id === id);
+
+    if (!reportToEdit) {
+      setMessage({
+        type: "warning",
+        text: "Report not found. It may have been deleted.",
+      });
+      return;
+    }
+
+    setReportData(reportToEdit);
+  }, [id, isEditMode]);
 
   const showMessage = (type, text) => {
     setMessage({ type, text });
@@ -79,6 +104,29 @@ const CreateReport = () => {
     const savedReports =
       JSON.parse(localStorage.getItem("jobproofReports")) || [];
 
+    if (isEditMode) {
+      const updatedReports = savedReports.map((report) =>
+        report.id === id
+          ? {
+              ...reportData,
+              id,
+              createdAt: reportData.createdAt || new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            }
+          : report
+      );
+
+      localStorage.setItem("jobproofReports", JSON.stringify(updatedReports));
+
+      showMessage("success", "Report updated successfully.");
+
+      setTimeout(() => {
+        navigate(`/reports/${id}`);
+      }, 800);
+
+      return;
+    }
+
     const newReport = {
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
@@ -103,7 +151,17 @@ const CreateReport = () => {
   return (
     <section>
       <div className="d-flex justify-content-between align-items-center mb-4">
-        <h1 className="mb-0">Create Job Report</h1>
+        <div>
+          <h1 className="mb-1">
+            {isEditMode ? "Edit Job Report" : "Create Job Report"}
+          </h1>
+
+          {isEditMode && (
+            <p className="text-muted mb-0">
+              Update this saved report and keep the same record.
+            </p>
+          )}
+        </div>
 
         <div className="d-flex gap-2 flex-wrap">
           <button className="btn btn-outline-danger" onClick={handleClearForm}>
@@ -111,7 +169,7 @@ const CreateReport = () => {
           </button>
 
           <button className="btn btn-primary" onClick={handleSaveReport}>
-            Save Report
+            {isEditMode ? "Update Report" : "Save Report"}
           </button>
 
           <button className="btn btn-success" onClick={handleDownloadPDF}>
