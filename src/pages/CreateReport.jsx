@@ -18,6 +18,18 @@ const initialReportData = {
 
 const CreateReport = () => {
   const [reportData, setReportData] = useState(initialReportData);
+  const [message, setMessage] = useState({
+    type: "",
+    text: "",
+  });
+
+  const showMessage = (type, text) => {
+    setMessage({ type, text });
+
+    setTimeout(() => {
+      setMessage({ type: "", text: "" });
+    }, 3500);
+  };
 
   const isReportValid = () => {
     return (
@@ -35,25 +47,32 @@ const CreateReport = () => {
   };
 
   const handleDownloadPDF = () => {
+    if (!isReportValid()) {
+      showMessage(
+        "warning",
+        "Please add at least one detail before downloading the PDF."
+      );
+      return;
+    }
+
     const clientName = reportData.clientName || "client";
     const fileName = `${clientName}-job-report.pdf`;
 
     generatePDF("report-preview", fileName);
+    showMessage("success", "PDF generated successfully.");
   };
 
   const handleClearForm = () => {
-    const confirmClear = window.confirm(
-      "Are you sure you want to clear the current report?"
-    );
-
-    if (!confirmClear) return;
-
     setReportData(initialReportData);
+    showMessage("info", "The form has been cleared.");
   };
 
   const handleSaveReport = () => {
     if (!isReportValid()) {
-      alert("Please add at least one detail before saving the report.");
+      showMessage(
+        "warning",
+        "Please add at least one detail before saving the report."
+      );
       return;
     }
 
@@ -70,7 +89,15 @@ const CreateReport = () => {
 
     localStorage.setItem("jobproofReports", JSON.stringify(updatedReports));
 
-    alert("Report saved successfully.");
+    showMessage("success", "Report saved successfully.");
+  };
+
+  const getAlertClass = () => {
+    if (message.type === "success") return "alert alert-success";
+    if (message.type === "warning") return "alert alert-warning";
+    if (message.type === "info") return "alert alert-info";
+
+    return "alert alert-secondary";
   };
 
   return (
@@ -92,6 +119,12 @@ const CreateReport = () => {
           </button>
         </div>
       </div>
+
+      {message.text && (
+        <div className={getAlertClass()} role="alert">
+          {message.text}
+        </div>
+      )}
 
       <div className="row g-4">
         <div className="col-lg-5">
