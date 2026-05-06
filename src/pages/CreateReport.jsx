@@ -19,6 +19,21 @@ const initialReportData = {
 const CreateReport = () => {
   const [reportData, setReportData] = useState(initialReportData);
 
+  const isReportValid = () => {
+    return (
+      reportData.businessName.trim() ||
+      reportData.clientName.trim() ||
+      reportData.jobAddress.trim() ||
+      reportData.jobDate.trim() ||
+      reportData.serviceType.trim() ||
+      reportData.workCompleted.trim() ||
+      reportData.issuesFound.trim() ||
+      reportData.recommendations.trim() ||
+      reportData.beforePhotos.length > 0 ||
+      reportData.afterPhotos.length > 0
+    );
+  };
+
   const handleDownloadPDF = () => {
     const clientName = reportData.clientName || "client";
     const fileName = `${clientName}-job-report.pdf`;
@@ -37,7 +52,13 @@ const CreateReport = () => {
   };
 
   const handleSaveReport = () => {
-    const savedReports = JSON.parse(localStorage.getItem("jobproofReports")) || [];
+    if (!isReportValid()) {
+      alert("Please add at least one detail before saving the report.");
+      return;
+    }
+
+    const savedReports =
+      JSON.parse(localStorage.getItem("jobproofReports")) || [];
 
     const newReport = {
       id: crypto.randomUUID(),
