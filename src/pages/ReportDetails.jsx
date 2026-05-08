@@ -26,11 +26,19 @@ const ReportDetails = () => {
     );
   }
 
-  const handleDownloadPDF = () => {
-    const clientName = report.clientName || "client";
-    const fileName = `${clientName}-saved-job-report.pdf`;
+  const handleDownloadPDF = async () => {
+    const currentReport = {
+      ...report,
+      beforePhotos: report.beforePhotos || [],
+      afterPhotos: report.afterPhotos || [],
+    };
 
-    generatePDF("report-preview", fileName);
+    try {
+      await generatePDF(currentReport);
+    } catch (error) {
+      console.error(error);
+      alert("There was an error generating the PDF.");
+    }
   };
 
   return (

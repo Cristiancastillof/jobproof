@@ -3,12 +3,16 @@ import { useNavigate, useParams } from "react-router-dom";
 import ReportForm from "../components/ReportForm";
 import ReportPreview from "../components/ReportPreview";
 import { generatePDF } from "../utils/generatePDF";
+import { calculateTotalHours } from "../utils/calculateTotalHours";
 
 const initialReportData = {
   businessName: "",
   clientName: "",
   jobAddress: "",
   jobDate: "",
+  startingHour: "",
+  finishHour: "",
+  totalHours: "",
   serviceType: "",
   workCompleted: "",
   issuesFound: "",
@@ -45,7 +49,15 @@ const CreateReport = () => {
       return;
     }
 
-    setReportData(reportToEdit);
+    setReportData({
+      ...initialReportData,
+      ...reportToEdit,
+      totalHours:
+        reportToEdit.totalHours ||
+        calculateTotalHours(reportToEdit.startingHour, reportToEdit.finishHour),
+      beforePhotos: reportToEdit.beforePhotos || [],
+      afterPhotos: reportToEdit.afterPhotos || [],
+    });
   }, [id, isEditMode]);
 
   const showMessage = (type, text) => {
@@ -62,6 +74,8 @@ const CreateReport = () => {
       reportData.clientName.trim() ||
       reportData.jobAddress.trim() ||
       reportData.jobDate.trim() ||
+      reportData.startingHour.trim() ||
+      reportData.finishHour.trim() ||
       reportData.serviceType.trim() ||
       reportData.workCompleted.trim() ||
       reportData.issuesFound.trim() ||
@@ -71,7 +85,19 @@ const CreateReport = () => {
     );
   };
 
-  const handleDownloadPDF = () => {
+  const prepareReportForSave = () => {
+    return {
+      ...reportData,
+      totalHours: calculateTotalHours(
+        reportData.startingHour,
+        reportData.finishHour
+      ),
+      beforePhotos: reportData.beforePhotos || [],
+      afterPhotos: reportData.afterPhotos || [],
+    };
+  };
+
+  const handleDownloadPDF = async () => {
     if (!isReportValid()) {
       showMessage(
         "warning",
@@ -80,11 +106,15 @@ const CreateReport = () => {
       return;
     }
 
-    const clientName = reportData.clientName || "client";
-    const fileName = `${clientName}-job-report.pdf`;
+    const currentReport = prepareReportForSave();
 
-    generatePDF("report-preview", fileName);
-    showMessage("success", "PDF generated successfully.");
+    try {
+      await generatePDF(currentReport);
+      showMessage("success", "PDF generated successfully.");
+    } catch (error) {
+      console.error(error);
+      showMessage("warning", "There was an error generating the PDF.");
+    }
   };
 
   const handleClearForm = () => {
@@ -104,11 +134,13 @@ const CreateReport = () => {
     const savedReports =
       JSON.parse(localStorage.getItem("jobproofReports")) || [];
 
+    const preparedReport = prepareReportForSave();
+
     if (isEditMode) {
       const updatedReports = savedReports.map((report) =>
         report.id === id
           ? {
-              ...reportData,
+              ...preparedReport,
               id,
               createdAt: reportData.createdAt || new Date().toISOString(),
               updatedAt: new Date().toISOString(),
@@ -130,7 +162,7 @@ const CreateReport = () => {
     const newReport = {
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
-      ...reportData,
+      ...preparedReport,
     };
 
     const updatedReports = [newReport, ...savedReports];

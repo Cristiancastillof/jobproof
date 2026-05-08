@@ -1,13 +1,23 @@
 import PhotoUploader from "./PhotoUploader";
+import { calculateTotalHours } from "../utils/calculateTotalHours";
 
 const ReportForm = ({ reportData, setReportData }) => {
   const handleChange = (event) => {
     const { name, value } = event.target;
 
-    setReportData({
+    const updatedData = {
       ...reportData,
       [name]: value,
-    });
+    };
+
+    if (name === "startingHour" || name === "finishHour") {
+      updatedData.totalHours = calculateTotalHours(
+        updatedData.startingHour,
+        updatedData.finishHour
+      );
+    }
+
+    setReportData(updatedData);
   };
 
   return (
@@ -60,6 +70,35 @@ const ReportForm = ({ reportData, setReportData }) => {
             value={reportData.jobDate}
             onChange={handleChange}
           />
+        </div>
+
+        <div className="row g-3">
+          <div className="col-md-6">
+            <label className="form-label">Starting hour</label>
+            <input
+              type="time"
+              className="form-control"
+              name="startingHour"
+              value={reportData.startingHour}
+              onChange={handleChange}
+            />
+          </div>
+
+          <div className="col-md-6">
+            <label className="form-label">Finish hour</label>
+            <input
+              type="time"
+              className="form-control"
+              name="finishHour"
+              value={reportData.finishHour}
+              onChange={handleChange}
+            />
+          </div>
+        </div>
+
+        <div className="alert alert-light border mt-3">
+          <strong>Total hours:</strong>{" "}
+          {reportData.totalHours || "Add starting and finish hour"}
         </div>
 
         <div className="mb-3">

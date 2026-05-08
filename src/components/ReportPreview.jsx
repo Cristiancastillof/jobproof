@@ -1,4 +1,10 @@
+import { calculateTotalHours } from "../utils/calculateTotalHours";
+
 const ReportPreview = ({ reportData }) => {
+  const totalHours =
+    reportData.totalHours ||
+    calculateTotalHours(reportData.startingHour, reportData.finishHour);
+
   const renderPhotos = (photos, title) => {
     if (!photos || photos.length === 0) {
       return (
@@ -51,6 +57,18 @@ const ReportPreview = ({ reportData }) => {
               <h5>Job details</h5>
               <p className="mb-1">
                 <strong>Date:</strong> {reportData.jobDate || "Job date"}
+              </p>
+              <p className="mb-1">
+                <strong>Start:</strong>{" "}
+                {reportData.startingHour || "Starting hour"}
+              </p>
+              <p className="mb-1">
+                <strong>Finish:</strong>{" "}
+                {reportData.finishHour || "Finish hour"}
+              </p>
+              <p className="mb-1">
+                <strong>Total hours:</strong>{" "}
+                {totalHours || "Total hours"}
               </p>
               <p className="mb-1">
                 <strong>Service:</strong>{" "}
