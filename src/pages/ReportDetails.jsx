@@ -45,7 +45,14 @@ const ReportDetails = () => {
     <section>
       <div className="d-flex justify-content-between align-items-center mb-4">
         <div>
-          <h1 className="mb-1">Report Details</h1>
+          <div className="d-flex align-items-center gap-2 flex-wrap mb-1">
+            <h1 className="mb-0">Report Details</h1>
+
+            <span className="badge bg-primary-subtle text-primary border border-primary-subtle">
+              {report.reportNumber || "No number"}
+            </span>
+          </div>
+
           <p className="text-muted mb-0">
             {report.clientName || "Unnamed client"} -{" "}
             {report.serviceType || "No service type"}

@@ -42,7 +42,7 @@ const cleanFileName = (value) => {
     .replace(/\s+/g, "-")
     .toLowerCase();
 
-  return cleaned || "client";
+  return cleaned || "file";
 };
 
 const getImageFormat = (src) => {
@@ -72,7 +72,12 @@ const addHeader = (pdf, reportData) => {
 
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(10);
-  pdf.text("Professional Job Report", PAGE_WIDTH - PAGE_MARGIN, 12, {
+
+  const headerRightText = reportData.reportNumber
+    ? `Professional Job Report | ${reportData.reportNumber}`
+    : "Professional Job Report";
+
+  pdf.text(headerRightText, PAGE_WIDTH - PAGE_MARGIN, 12, {
     align: "right",
   });
 };
@@ -266,6 +271,7 @@ export const generatePDF = async (reportData) => {
     calculateTotalHours(reportData.startingHour, reportData.finishHour);
 
   const currentReportData = {
+    reportNumber: reportData.reportNumber || "Draft",
     businessName: reportData.businessName || "",
     clientName: reportData.clientName || "",
     jobAddress: reportData.jobAddress || "",
@@ -330,6 +336,12 @@ export const generatePDF = async (reportData) => {
     head: [["Client & Job Information", "", "Report Details", ""]],
     body: [
       [
+        "Report No.",
+        currentReportData.reportNumber || "Draft",
+        "Generated",
+        formatDate(new Date().toISOString()),
+      ],
+      [
         "Business",
         currentReportData.businessName || "Not provided",
         "Client",
@@ -344,20 +356,14 @@ export const generatePDF = async (reportData) => {
       [
         "Service Type",
         currentReportData.serviceType || "Not provided",
-        "Generated",
-        formatDate(new Date().toISOString()),
+        "Total Hours",
+        currentReportData.totalHours || "Not provided",
       ],
       [
         "Start Time",
         formatTime(currentReportData.startingHour),
         "Finish Time",
         formatTime(currentReportData.finishHour),
-      ],
-      [
-        "Total Hours",
-        currentReportData.totalHours || "Not provided",
-        "",
-        "",
       ],
     ],
   });
@@ -409,9 +415,18 @@ export const generatePDF = async (reportData) => {
     pageNumberRef
   );
 
-  const clientName = currentReportData.clientName || "client";
+  const reportNumber =
+    currentReportData.reportNumber && currentReportData.reportNumber !== "Draft"
+      ? cleanFileName(currentReportData.reportNumber)
+      : "draft-report";
+
+  const clientName = currentReportData.clientName
+    ? cleanFileName(currentReportData.clientName)
+    : "client";
+
   const uniqueId = new Date().toISOString().replace(/[:.]/g, "-");
-  const fileName = `${cleanFileName(clientName)}-${uniqueId}-jobproof-report.pdf`;
+
+  const fileName = `${reportNumber}-${clientName}-${uniqueId}-jobproof-report.pdf`;
 
   pdf.save(fileName);
 };

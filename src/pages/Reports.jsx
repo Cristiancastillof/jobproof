@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 const Reports = () => {
   const [reports, setReports] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     const savedReports =
@@ -10,6 +11,28 @@ const Reports = () => {
 
     setReports(savedReports);
   }, []);
+
+  const filteredReports = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    if (!normalizedSearch) return reports;
+
+    return reports.filter((report) => {
+      const searchableText = [
+        report.reportNumber,
+        report.clientName,
+        report.businessName,
+        report.jobAddress,
+        report.serviceType,
+        report.jobDate,
+        report.workCompleted,
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return searchableText.includes(normalizedSearch);
+    });
+  }, [reports, searchTerm]);
 
   const handleDeleteReport = (reportId) => {
     const confirmDelete = window.confirm(
@@ -33,6 +56,7 @@ const Reports = () => {
 
     localStorage.removeItem("jobproofReports");
     setReports([]);
+    setSearchTerm("");
   };
 
   const renderSmallPhotos = (photos) => {
@@ -104,81 +128,117 @@ const Reports = () => {
         </div>
       </div>
 
-      <div className="row g-3">
-        {reports.map((report) => (
-          <div className="col-md-6 col-lg-4" key={report.id}>
-            <div className="card shadow-sm h-100 saved-report-card">
-              <div className="card-body d-flex flex-column">
-                <h2 className="h5 mb-2">
-                  {report.clientName || "Unnamed client"}
-                </h2>
+      <div className="card shadow-sm mb-4">
+        <div className="card-body">
+          <label className="form-label">Search reports</label>
 
-                <p className="text-muted mb-1">
-                  <strong>Business:</strong>{" "}
-                  {report.businessName || "No business name"}
-                </p>
+          <input
+            type="text"
+            className="form-control"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search by report number, client, business, address or service..."
+          />
 
-                <p className="text-muted mb-1">
-                  <strong>Service:</strong>{" "}
-                  {report.serviceType || "No service type"}
-                </p>
+          <small className="text-muted d-block mt-2">
+            Showing {filteredReports.length} of {reports.length} report
+            {reports.length === 1 ? "" : "s"}.
+          </small>
+        </div>
+      </div>
 
-                <p className="text-muted mb-1">
-                  <strong>Date:</strong> {report.jobDate || "No job date"}
-                </p>
+      {filteredReports.length === 0 ? (
+        <div className="alert alert-warning">
+          No reports matched your search. Try another report number, client
+          name, business name, address or service type.
+        </div>
+      ) : (
+        <div className="row g-3">
+          {filteredReports.map((report) => (
+            <div className="col-md-6 col-lg-4" key={report.id}>
+              <div className="card shadow-sm h-100 saved-report-card">
+                <div className="card-body d-flex flex-column">
+                  <div className="d-flex justify-content-between align-items-start gap-2 mb-2">
+                    <h2 className="h5 mb-0">
+                      {report.clientName || "Unnamed client"}
+                    </h2>
 
-                <p className="text-muted mb-3">
-                  <strong>Address:</strong>{" "}
-                  {report.jobAddress || "No job address"}
-                </p>
+                    <span className="badge bg-primary-subtle text-primary border border-primary-subtle">
+                      {report.reportNumber || "No number"}
+                    </span>
+                  </div>
 
-                <p className="small">
-                  {report.workCompleted
-                    ? report.workCompleted.slice(0, 120)
-                    : "No work notes added."}
-                  {report.workCompleted && report.workCompleted.length > 120
-                    ? "..."
-                    : ""}
-                </p>
+                  <p className="text-muted mb-1">
+                    <strong>Business:</strong>{" "}
+                    {report.businessName || "No business name"}
+                  </p>
 
-                <div className="mb-3">
-                  <strong className="small d-block mb-1">Before photos</strong>
-                  {renderSmallPhotos(report.beforePhotos)}
-                </div>
+                  <p className="text-muted mb-1">
+                    <strong>Service:</strong>{" "}
+                    {report.serviceType || "No service type"}
+                  </p>
 
-                <div className="mb-3">
-                  <strong className="small d-block mb-1">After photos</strong>
-                  {renderSmallPhotos(report.afterPhotos)}
-                </div>
+                  <p className="text-muted mb-1">
+                    <strong>Date:</strong> {report.jobDate || "No job date"}
+                  </p>
 
-                <div className="d-flex justify-content-between align-items-center mt-auto">
-                  <small className="text-muted">
-                    {report.createdAt
-                      ? new Date(report.createdAt).toLocaleDateString()
-                      : "No saved date"}
-                  </small>
+                  <p className="text-muted mb-3">
+                    <strong>Address:</strong>{" "}
+                    {report.jobAddress || "No job address"}
+                  </p>
 
-                  <div className="d-flex gap-2">
-                    <Link
-                      to={`/reports/${report.id}`}
-                      className="btn btn-sm btn-primary"
-                    >
-                      View
-                    </Link>
+                  <p className="small">
+                    {report.workCompleted
+                      ? report.workCompleted.slice(0, 120)
+                      : "No work notes added."}
+                    {report.workCompleted && report.workCompleted.length > 120
+                      ? "..."
+                      : ""}
+                  </p>
 
-                    <button
-                      className="btn btn-sm btn-outline-danger"
-                      onClick={() => handleDeleteReport(report.id)}
-                    >
-                      Delete
-                    </button>
+                  <div className="mb-3">
+                    <strong className="small d-block mb-1">
+                      Before photos
+                    </strong>
+                    {renderSmallPhotos(report.beforePhotos)}
+                  </div>
+
+                  <div className="mb-3">
+                    <strong className="small d-block mb-1">
+                      After photos
+                    </strong>
+                    {renderSmallPhotos(report.afterPhotos)}
+                  </div>
+
+                  <div className="d-flex justify-content-between align-items-center mt-auto">
+                    <small className="text-muted">
+                      {report.createdAt
+                        ? new Date(report.createdAt).toLocaleDateString()
+                        : "No saved date"}
+                    </small>
+
+                    <div className="d-flex gap-2">
+                      <Link
+                        to={`/reports/${report.id}`}
+                        className="btn btn-sm btn-primary"
+                      >
+                        View
+                      </Link>
+
+                      <button
+                        className="btn btn-sm btn-outline-danger"
+                        onClick={() => handleDeleteReport(report.id)}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 };

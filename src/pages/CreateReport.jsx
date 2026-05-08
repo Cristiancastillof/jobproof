@@ -4,8 +4,10 @@ import ReportForm from "../components/ReportForm";
 import ReportPreview from "../components/ReportPreview";
 import { generatePDF } from "../utils/generatePDF";
 import { calculateTotalHours } from "../utils/calculateTotalHours";
+import { generateReportNumber } from "../utils/generateReportNumber";
 
 const initialReportData = {
+  reportNumber: "",
   businessName: "",
   clientName: "",
   jobAddress: "",
@@ -142,6 +144,8 @@ const CreateReport = () => {
           ? {
               ...preparedReport,
               id,
+              reportNumber:
+                reportData.reportNumber || report.reportNumber || generateReportNumber(),
               createdAt: reportData.createdAt || new Date().toISOString(),
               updatedAt: new Date().toISOString(),
             }
@@ -160,16 +164,19 @@ const CreateReport = () => {
     }
 
     const newReport = {
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
       ...preparedReport,
+      id: crypto.randomUUID(),
+      reportNumber: generateReportNumber(),
+      createdAt: new Date().toISOString(),
     };
 
     const updatedReports = [newReport, ...savedReports];
 
     localStorage.setItem("jobproofReports", JSON.stringify(updatedReports));
 
-    showMessage("success", "Report saved successfully.");
+    setReportData(newReport);
+
+    showMessage("success", `Report saved successfully: ${newReport.reportNumber}`);
   };
 
   const getAlertClass = () => {
@@ -191,6 +198,12 @@ const CreateReport = () => {
           {isEditMode && (
             <p className="text-muted mb-0">
               Update this saved report and keep the same record.
+            </p>
+          )}
+
+          {!isEditMode && reportData.reportNumber && (
+            <p className="text-muted mb-0">
+              Report number: <strong>{reportData.reportNumber}</strong>
             </p>
           )}
         </div>

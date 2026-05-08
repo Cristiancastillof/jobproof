@@ -34,19 +34,36 @@ const ReportPreview = ({ reportData }) => {
       <div className="card-body">
         <div id="report-preview" className="report-preview bg-white p-4">
           <div className="border-bottom pb-3 mb-4">
-            <h2 className="fw-bold mb-1">
-              {reportData.businessName || "Your Business Name"}
-            </h2>
-            <p className="text-muted mb-0">Professional Job Report</p>
+            <div className="d-flex justify-content-between align-items-start gap-3">
+              <div>
+                <h2 className="fw-bold mb-1">
+                  {reportData.businessName || "Your Business Name"}
+                </h2>
+                <p className="text-muted mb-0">Professional Job Report</p>
+              </div>
+
+              <div className="text-end">
+                <span className="badge bg-primary-subtle text-primary border border-primary-subtle">
+                  {reportData.reportNumber || "Draft report"}
+                </span>
+              </div>
+            </div>
           </div>
 
           <div className="row mb-4">
             <div className="col-md-6">
               <h5>Client details</h5>
+
+              <p className="mb-1">
+                <strong>Report No:</strong>{" "}
+                {reportData.reportNumber || "Not saved yet"}
+              </p>
+
               <p className="mb-1">
                 <strong>Client:</strong>{" "}
                 {reportData.clientName || "Client name"}
               </p>
+
               <p className="mb-1">
                 <strong>Address:</strong>{" "}
                 {reportData.jobAddress || "Job address"}
@@ -55,21 +72,26 @@ const ReportPreview = ({ reportData }) => {
 
             <div className="col-md-6">
               <h5>Job details</h5>
+
               <p className="mb-1">
                 <strong>Date:</strong> {reportData.jobDate || "Job date"}
               </p>
+
               <p className="mb-1">
                 <strong>Start:</strong>{" "}
                 {reportData.startingHour || "Starting hour"}
               </p>
+
               <p className="mb-1">
                 <strong>Finish:</strong>{" "}
                 {reportData.finishHour || "Finish hour"}
               </p>
+
               <p className="mb-1">
                 <strong>Total hours:</strong>{" "}
                 {totalHours || "Total hours"}
               </p>
+
               <p className="mb-1">
                 <strong>Service:</strong>{" "}
                 {reportData.serviceType || "Service type"}

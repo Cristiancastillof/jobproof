@@ -145,7 +145,7 @@ textarea {
   padding: 4px;
 }
 
-/* Photos inside the PDF/report preview */
+/* Photos inside the report preview */
 
 .report-photo {
   width: 100%;
@@ -183,36 +183,174 @@ textarea {
   padding: 3px;
 }
 
-/* Mobile */
+/* Tablet */
 
-@media (max-width: 768px) {
-  .d-flex.justify-content-between {
-    flex-direction: column;
-    align-items: flex-start !important;
-    gap: 12px;
-  }
-
-  .d-flex.justify-content-between .btn {
-    width: 100%;
+@media (max-width: 992px) {
+  main.container {
+    max-width: 100%;
   }
 
   .report-preview {
     min-height: auto;
   }
 
+  .hero-section {
+    padding-top: 3rem !important;
+    padding-bottom: 3rem !important;
+  }
+
+  .display-4 {
+    font-size: 2.7rem;
+  }
+}
+
+/* Mobile */
+
+@media (max-width: 768px) {
+  main.container {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .navbar .container {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .card {
+    border-radius: 12px;
+  }
+
   .card-body {
     padding: 1rem;
   }
 
+  .btn {
+    width: 100%;
+  }
+
+  .d-flex.justify-content-between {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 12px;
+  }
+
+  .d-flex.justify-content-between > .d-flex {
+    width: 100%;
+  }
+
+  .d-flex.justify-content-between > .d-flex .btn {
+    flex: 1 1 100%;
+  }
+
   .hero-section {
     border-radius: 18px;
+    padding: 2.5rem 1rem !important;
   }
 
   .hero-section h1 {
-    font-size: 2.2rem;
+    font-size: 2.1rem;
+    line-height: 1.15;
+  }
+
+  .hero-section .lead {
+    font-size: 1rem;
+  }
+
+  .hero-section .btn {
+    width: 100%;
+  }
+
+  .landing-panel .card-body {
+    padding: 1.25rem !important;
+  }
+
+  .step-box {
+    padding: 16px;
+  }
+
+  .use-case-pill {
+    border-radius: 14px;
   }
 
   .cta-section {
     border-radius: 18px;
+    padding: 2rem 1rem !important;
+  }
+
+  .report-preview {
+    padding: 1rem !important;
+    font-size: 0.95rem;
+  }
+
+  .report-preview h2 {
+    font-size: 1.35rem;
+  }
+
+  .report-preview h5 {
+    font-size: 1rem;
+  }
+
+  .report-photo {
+    max-height: 190px;
+  }
+
+  .photo-thumb {
+    height: 100px;
+  }
+
+  .saved-report-thumb {
+    width: 56px !important;
+    height: 56px !important;
+    max-width: 56px !important;
+    max-height: 56px !important;
+  }
+}
+
+/* Small mobile */
+
+@media (max-width: 480px) {
+  main.container {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .hero-section h1 {
+    font-size: 1.8rem;
+  }
+
+  .display-4 {
+    font-size: 1.9rem;
+  }
+
+  h1 {
+    font-size: 1.75rem;
+  }
+
+  .card-body {
+    padding: 0.9rem;
+  }
+
+  .report-preview {
+    padding: 0.85rem !important;
+  }
+
+  .report-photo {
+    max-height: 160px;
+  }
+
+  .photo-thumb {
+    height: 90px;
+  }
+
+  .saved-report-photo-list {
+    gap: 6px;
+  }
+
+  .saved-report-thumb {
+    width: 50px !important;
+    height: 50px !important;
+    max-width: 50px !important;
+    max-height: 50px !important;
   }
 }
