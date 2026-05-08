@@ -1,5 +1,6 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { calculateTotalHours } from "./calculateTotalHours";
 
 const PAGE_MARGIN = 14;
 const PAGE_WIDTH = 210;
@@ -22,6 +23,16 @@ const formatDate = (dateString) => {
     month: "long",
     year: "numeric",
   });
+};
+
+const formatTime = (timeString) => {
+  if (!timeString) return "Not provided";
+
+  const [hours, minutes] = timeString.split(":");
+
+  if (!hours || !minutes) return timeString;
+
+  return `${hours}:${minutes}`;
 };
 
 const cleanFileName = (value) => {
@@ -250,11 +261,18 @@ const addPhotoSection = async (
 };
 
 export const generatePDF = async (reportData) => {
+  const calculatedTotalHours =
+    reportData.totalHours ||
+    calculateTotalHours(reportData.startingHour, reportData.finishHour);
+
   const currentReportData = {
     businessName: reportData.businessName || "",
     clientName: reportData.clientName || "",
     jobAddress: reportData.jobAddress || "",
     jobDate: reportData.jobDate || "",
+    startingHour: reportData.startingHour || "",
+    finishHour: reportData.finishHour || "",
+    totalHours: calculatedTotalHours || "",
     serviceType: reportData.serviceType || "",
     workCompleted: reportData.workCompleted || "",
     issuesFound: reportData.issuesFound || "",
@@ -328,6 +346,18 @@ export const generatePDF = async (reportData) => {
         currentReportData.serviceType || "Not provided",
         "Generated",
         formatDate(new Date().toISOString()),
+      ],
+      [
+        "Start Time",
+        formatTime(currentReportData.startingHour),
+        "Finish Time",
+        formatTime(currentReportData.finishHour),
+      ],
+      [
+        "Total Hours",
+        currentReportData.totalHours || "Not provided",
+        "",
+        "",
       ],
     ],
   });
