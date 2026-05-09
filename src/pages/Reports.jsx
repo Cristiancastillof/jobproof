@@ -22,11 +22,17 @@ const Reports = () => {
         report.reportNumber,
         report.clientName,
         report.businessName,
+        report.businessEmail,
+        report.businessPhone,
+        report.workerName,
         report.jobAddress,
         report.serviceType,
         report.jobDate,
         report.workCompleted,
+        report.issuesFound,
+        report.recommendations,
       ]
+        .filter(Boolean)
         .join(" ")
         .toLowerCase();
 
@@ -130,14 +136,17 @@ const Reports = () => {
 
       <div className="card shadow-sm mb-4">
         <div className="card-body">
-          <label className="form-label">Search reports</label>
+          <label htmlFor="reportsSearch" className="form-label">
+            Search reports
+          </label>
 
           <input
+            id="reportsSearch"
             type="text"
             className="form-control"
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Search by report number, client, business, address or service..."
+            placeholder="Search by report number, client, worker, business, email, phone, address or service..."
           />
 
           <small className="text-muted d-block mt-2">
@@ -149,8 +158,8 @@ const Reports = () => {
 
       {filteredReports.length === 0 ? (
         <div className="alert alert-warning">
-          No reports matched your search. Try another report number, client
-          name, business name, address or service type.
+          No reports matched your search. Try another report number, client,
+          worker, business, email, phone, address or service type.
         </div>
       ) : (
         <div className="row g-3">
@@ -171,6 +180,23 @@ const Reports = () => {
                   <p className="text-muted mb-1">
                     <strong>Business:</strong>{" "}
                     {report.businessName || "No business name"}
+                  </p>
+
+                  {report.businessEmail && (
+                    <p className="text-muted mb-1">
+                      <strong>Email:</strong> {report.businessEmail}
+                    </p>
+                  )}
+
+                  {report.businessPhone && (
+                    <p className="text-muted mb-1">
+                      <strong>Phone:</strong> {report.businessPhone}
+                    </p>
+                  )}
+
+                  <p className="text-muted mb-1">
+                    <strong>Completed by:</strong>{" "}
+                    {report.workerName || "No worker assigned"}
                   </p>
 
                   <p className="text-muted mb-1">
