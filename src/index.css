@@ -354,3 +354,53 @@ textarea {
     max-height: 50px !important;
   }
 }
+/* Mobile report actions */
+
+.mobile-clear-action {
+  display: none;
+}
+
+.mobile-report-actions {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .create-report-page {
+    padding-bottom: 96px;
+  }
+
+  .desktop-report-actions {
+    display: none !important;
+  }
+
+  .mobile-clear-action {
+    display: block;
+    width: 100%;
+  }
+
+  .mobile-clear-action .btn {
+    width: 100%;
+  }
+
+  .mobile-report-actions {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1050;
+    display: flex;
+    gap: 10px;
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.96);
+    border-top: 1px solid rgba(15, 23, 42, 0.12);
+    box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.12);
+    backdrop-filter: blur(10px);
+  }
+
+  .mobile-action-button {
+    flex: 1;
+    min-height: 48px;
+    font-weight: 700;
+    border-radius: 12px;
+  }
+}

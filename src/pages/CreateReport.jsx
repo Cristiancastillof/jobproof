@@ -253,8 +253,8 @@ const CreateReport = () => {
   };
 
   return (
-    <section>
-      <div className="d-flex justify-content-between align-items-center mb-4">
+    <section className="create-report-page">
+      <div className="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
         <div>
           <h1 className="mb-1">
             {isEditMode ? "Edit Job Report" : "Create Job Report"}
@@ -286,7 +286,7 @@ const CreateReport = () => {
           )}
         </div>
 
-        <div className="d-flex gap-2 flex-wrap">
+        <div className="desktop-report-actions d-flex gap-2 flex-wrap">
           <button className="btn btn-outline-danger" onClick={handleClearForm}>
             Clear Form
           </button>
@@ -297,6 +297,12 @@ const CreateReport = () => {
 
           <button className="btn btn-success" onClick={handleDownloadPDF}>
             Download PDF
+          </button>
+        </div>
+
+        <div className="mobile-clear-action">
+          <button className="btn btn-outline-danger" onClick={handleClearForm}>
+            Clear Form
           </button>
         </div>
       </div>
@@ -315,6 +321,16 @@ const CreateReport = () => {
         <div className="col-lg-7">
           <ReportPreview reportData={reportData} />
         </div>
+      </div>
+
+      <div className="mobile-report-actions">
+        <button className="btn btn-primary mobile-action-button" onClick={handleSaveReport}>
+          {isEditMode ? "Update" : "Save"}
+        </button>
+
+        <button className="btn btn-success mobile-action-button" onClick={handleDownloadPDF}>
+          PDF
+        </button>
       </div>
     </section>
   );
