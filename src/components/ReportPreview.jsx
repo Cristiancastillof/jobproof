@@ -34,12 +34,35 @@ const ReportPreview = ({ reportData }) => {
       <div className="card-body">
         <div id="report-preview" className="report-preview bg-white p-4">
           <div className="border-bottom pb-3 mb-4">
-            <div className="d-flex justify-content-between align-items-start gap-3">
-              <div>
-                <h2 className="fw-bold mb-1">
-                  {reportData.businessName || "Your Business Name"}
-                </h2>
-                <p className="text-muted mb-0">Professional Job Report</p>
+            <div className="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+              <div className="d-flex align-items-start gap-3">
+                {reportData.businessLogo && (
+                  <img
+                    src={reportData.businessLogo}
+                    alt="Business logo"
+                    className="business-logo-preview"
+                  />
+                )}
+
+                <div>
+                  <h2 className="fw-bold mb-1">
+                    {reportData.businessName || "Your Business Name"}
+                  </h2>
+
+                  <p className="text-muted mb-1">Professional Job Report</p>
+
+                  {(reportData.businessEmail || reportData.businessPhone) && (
+                    <div className="small text-muted">
+                      {reportData.businessEmail && (
+                        <div>{reportData.businessEmail}</div>
+                      )}
+
+                      {reportData.businessPhone && (
+                        <div>{reportData.businessPhone}</div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="text-end">
@@ -88,13 +111,17 @@ const ReportPreview = ({ reportData }) => {
               </p>
 
               <p className="mb-1">
-                <strong>Total hours:</strong>{" "}
-                {totalHours || "Total hours"}
+                <strong>Total hours:</strong> {totalHours || "Total hours"}
               </p>
 
               <p className="mb-1">
                 <strong>Service:</strong>{" "}
                 {reportData.serviceType || "Service type"}
+              </p>
+
+              <p className="mb-1">
+                <strong>Completed by:</strong>{" "}
+                {reportData.workerName || "Worker name"}
               </p>
             </div>
           </div>

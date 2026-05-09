@@ -9,6 +9,10 @@ import { generateReportNumber } from "../utils/generateReportNumber";
 const initialReportData = {
   reportNumber: "",
   businessName: "",
+  businessEmail: "",
+  businessPhone: "",
+  businessLogo: "",
+  workerName: "",
   clientName: "",
   jobAddress: "",
   jobDate: "",
@@ -23,6 +27,34 @@ const initialReportData = {
   afterPhotos: [],
 };
 
+const getSavedBusinessProfile = () => {
+  const savedBusinessProfile = localStorage.getItem("jobproofBusinessProfile");
+
+  if (!savedBusinessProfile) return null;
+
+  try {
+    return JSON.parse(savedBusinessProfile);
+  } catch (error) {
+    console.error("Invalid business profile data:", error);
+    return null;
+  }
+};
+
+const getReportDataWithBusinessProfile = () => {
+  const savedBusinessProfile = getSavedBusinessProfile();
+
+  if (!savedBusinessProfile) return initialReportData;
+
+  return {
+    ...initialReportData,
+    businessName: savedBusinessProfile.businessName || "",
+    businessEmail: savedBusinessProfile.businessEmail || "",
+    businessPhone: savedBusinessProfile.businessPhone || "",
+    businessLogo: savedBusinessProfile.businessLogo || "",
+    workerName: savedBusinessProfile.defaultWorkerName || "",
+  };
+};
+
 const CreateReport = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -34,6 +66,14 @@ const CreateReport = () => {
     type: "",
     text: "",
   });
+
+  useEffect(() => {
+    if (isEditMode) return;
+
+    const dataWithBusinessProfile = getReportDataWithBusinessProfile();
+
+    setReportData(dataWithBusinessProfile);
+  }, [isEditMode]);
 
   useEffect(() => {
     if (!isEditMode) return;
@@ -73,6 +113,9 @@ const CreateReport = () => {
   const isReportValid = () => {
     return (
       reportData.businessName.trim() ||
+      reportData.businessEmail.trim() ||
+      reportData.businessPhone.trim() ||
+      reportData.workerName.trim() ||
       reportData.clientName.trim() ||
       reportData.jobAddress.trim() ||
       reportData.jobDate.trim() ||
@@ -120,7 +163,24 @@ const CreateReport = () => {
   };
 
   const handleClearForm = () => {
-    setReportData(initialReportData);
+    if (isEditMode) {
+      setReportData(initialReportData);
+      showMessage("info", "The form has been cleared.");
+      return;
+    }
+
+    const dataWithBusinessProfile = getReportDataWithBusinessProfile();
+
+    setReportData(dataWithBusinessProfile);
+
+    if (dataWithBusinessProfile.businessName) {
+      showMessage(
+        "info",
+        "The form has been cleared. Business profile was kept."
+      );
+      return;
+    }
+
     showMessage("info", "The form has been cleared.");
   };
 
@@ -145,7 +205,9 @@ const CreateReport = () => {
               ...preparedReport,
               id,
               reportNumber:
-                reportData.reportNumber || report.reportNumber || generateReportNumber(),
+                reportData.reportNumber ||
+                report.reportNumber ||
+                generateReportNumber(),
               createdAt: reportData.createdAt || new Date().toISOString(),
               updatedAt: new Date().toISOString(),
             }
@@ -176,7 +238,10 @@ const CreateReport = () => {
 
     setReportData(newReport);
 
-    showMessage("success", `Report saved successfully: ${newReport.reportNumber}`);
+    showMessage(
+      "success",
+      `Report saved successfully: ${newReport.reportNumber}`
+    );
   };
 
   const getAlertClass = () => {
@@ -198,6 +263,19 @@ const CreateReport = () => {
           {isEditMode && (
             <p className="text-muted mb-0">
               Update this saved report and keep the same record.
+            </p>
+          )}
+
+          {!isEditMode && reportData.businessName && (
+            <p className="text-muted mb-0">
+              Business profile loaded:{" "}
+              <strong>{reportData.businessName}</strong>
+            </p>
+          )}
+
+          {!isEditMode && reportData.workerName && (
+            <p className="text-muted mb-0">
+              Default worker: <strong>{reportData.workerName}</strong>
             </p>
           )}
 

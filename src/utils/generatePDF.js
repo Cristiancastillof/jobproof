@@ -5,9 +5,9 @@ import { calculateTotalHours } from "./calculateTotalHours";
 const PAGE_MARGIN = 14;
 const PAGE_WIDTH = 210;
 const PAGE_HEIGHT = 297;
-const HEADER_HEIGHT = 20;
+const HEADER_HEIGHT = 24;
 const FOOTER_HEIGHT = 16;
-const TOP_CONTENT_Y = 30;
+const TOP_CONTENT_Y = 34;
 const BOTTOM_LIMIT = PAGE_HEIGHT - FOOTER_HEIGHT - 8;
 const CONTENT_WIDTH = PAGE_WIDTH - PAGE_MARGIN * 2;
 
@@ -61,17 +61,72 @@ const loadImage = (src) => {
   });
 };
 
-const addHeader = (pdf, reportData) => {
+const addImageSafely = async (pdf, imageSrc, x, y, maxWidth, maxHeight) => {
+  if (!imageSrc) return false;
+
+  try {
+    const img = await loadImage(imageSrc);
+
+    const ratio = Math.min(maxWidth / img.width, maxHeight / img.height);
+
+    const renderWidth = img.width * ratio;
+    const renderHeight = img.height * ratio;
+
+    pdf.addImage(
+      imageSrc,
+      getImageFormat(imageSrc),
+      x,
+      y,
+      renderWidth,
+      renderHeight
+    );
+
+    return true;
+  } catch (error) {
+    console.error("Logo could not be added:", error);
+    return false;
+  }
+};
+
+const addHeader = async (pdf, reportData) => {
   pdf.setFillColor(13, 110, 253);
   pdf.rect(0, 0, PAGE_WIDTH, HEADER_HEIGHT, "F");
 
+  let textX = PAGE_MARGIN;
+
+  if (reportData.businessLogo) {
+    const logoAdded = await addImageSafely(
+      pdf,
+      reportData.businessLogo,
+      PAGE_MARGIN,
+      5,
+      14,
+      14
+    );
+
+    if (logoAdded) {
+      textX = PAGE_MARGIN + 18;
+    }
+  }
+
   pdf.setTextColor(255, 255, 255);
   pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(16);
-  pdf.text(reportData.businessName || "JobProof", PAGE_MARGIN, 12);
+  pdf.setFontSize(15);
+  pdf.text(reportData.businessName || "JobProof", textX, 11);
 
   pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(10);
+  pdf.setFontSize(8.5);
+
+  const contactDetails = [reportData.businessEmail, reportData.businessPhone]
+    .filter(Boolean)
+    .join(" | ");
+
+  if (contactDetails) {
+    pdf.text(contactDetails, textX, 17);
+  }
+
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(9);
 
   const headerRightText = reportData.reportNumber
     ? `Professional Job Report | ${reportData.reportNumber}`
@@ -102,15 +157,15 @@ const addFooter = (pdf, pageNumber) => {
   });
 };
 
-const setupPage = (pdf, reportData, pageNumber) => {
-  addHeader(pdf, reportData);
+const setupPage = async (pdf, reportData, pageNumber) => {
+  await addHeader(pdf, reportData);
   addFooter(pdf, pageNumber);
 };
 
-const addNewPage = (pdf, reportData, pageNumberRef) => {
+const addNewPage = async (pdf, reportData, pageNumberRef) => {
   pdf.addPage();
   pageNumberRef.value += 1;
-  setupPage(pdf, reportData, pageNumberRef.value);
+  await setupPage(pdf, reportData, pageNumberRef.value);
 
   return TOP_CONTENT_Y;
 };
@@ -127,11 +182,18 @@ const addSectionTitle = (pdf, title, y) => {
   return y + 10;
 };
 
-const addTextSection = (pdf, title, content, y, reportData, pageNumberRef) => {
+const addTextSection = async (
+  pdf,
+  title,
+  content,
+  y,
+  reportData,
+  pageNumberRef
+) => {
   const safeContent = content?.trim() || "Not provided";
 
   if (y > BOTTOM_LIMIT - 25) {
-    y = addNewPage(pdf, reportData, pageNumberRef);
+    y = await addNewPage(pdf, reportData, pageNumberRef);
   }
 
   y = addSectionTitle(pdf, title, y);
@@ -145,7 +207,7 @@ const addTextSection = (pdf, title, content, y, reportData, pageNumberRef) => {
   const textHeight = lines.length * lineHeight;
 
   if (y + textHeight > BOTTOM_LIMIT) {
-    y = addNewPage(pdf, reportData, pageNumberRef);
+    y = await addNewPage(pdf, reportData, pageNumberRef);
     y = addSectionTitle(pdf, title, y);
   }
 
@@ -209,7 +271,7 @@ const addPhotoSection = async (
   pageNumberRef
 ) => {
   if (y > BOTTOM_LIMIT - 35) {
-    y = addNewPage(pdf, reportData, pageNumberRef);
+    y = await addNewPage(pdf, reportData, pageNumberRef);
   }
 
   y = addSectionTitle(pdf, title, y);
@@ -230,7 +292,7 @@ const addPhotoSection = async (
 
   for (let index = 0; index < photos.length; index += 2) {
     if (y + rowHeight > BOTTOM_LIMIT) {
-      y = addNewPage(pdf, reportData, pageNumberRef);
+      y = await addNewPage(pdf, reportData, pageNumberRef);
       y = addSectionTitle(pdf, `${title} continued`, y);
     }
 
@@ -273,6 +335,10 @@ export const generatePDF = async (reportData) => {
   const currentReportData = {
     reportNumber: reportData.reportNumber || "Draft",
     businessName: reportData.businessName || "",
+    businessEmail: reportData.businessEmail || "",
+    businessPhone: reportData.businessPhone || "",
+    businessLogo: reportData.businessLogo || "",
+    workerName: reportData.workerName || "",
     clientName: reportData.clientName || "",
     jobAddress: reportData.jobAddress || "",
     jobDate: reportData.jobDate || "",
@@ -293,7 +359,7 @@ export const generatePDF = async (reportData) => {
     value: 1,
   };
 
-  setupPage(pdf, currentReportData, pageNumberRef.value);
+  await setupPage(pdf, currentReportData, pageNumberRef.value);
 
   let y = TOP_CONTENT_Y;
 
@@ -348,6 +414,12 @@ export const generatePDF = async (reportData) => {
         currentReportData.clientName || "Not provided",
       ],
       [
+        "Business Email",
+        currentReportData.businessEmail || "Not provided",
+        "Business Phone",
+        currentReportData.businessPhone || "Not provided",
+      ],
+      [
         "Address",
         currentReportData.jobAddress || "Not provided",
         "Job Date",
@@ -356,8 +428,8 @@ export const generatePDF = async (reportData) => {
       [
         "Service Type",
         currentReportData.serviceType || "Not provided",
-        "Total Hours",
-        currentReportData.totalHours || "Not provided",
+        "Completed By",
+        currentReportData.workerName || "Not provided",
       ],
       [
         "Start Time",
@@ -365,12 +437,18 @@ export const generatePDF = async (reportData) => {
         "Finish Time",
         formatTime(currentReportData.finishHour),
       ],
+      [
+        "Total Hours",
+        currentReportData.totalHours || "Not provided",
+        "",
+        "",
+      ],
     ],
   });
 
   y = pdf.lastAutoTable.finalY + 10;
 
-  y = addTextSection(
+  y = await addTextSection(
     pdf,
     "Work Completed",
     currentReportData.workCompleted,
@@ -379,7 +457,7 @@ export const generatePDF = async (reportData) => {
     pageNumberRef
   );
 
-  y = addTextSection(
+  y = await addTextSection(
     pdf,
     "Issues Found",
     currentReportData.issuesFound,
@@ -388,7 +466,7 @@ export const generatePDF = async (reportData) => {
     pageNumberRef
   );
 
-  y = addTextSection(
+  y = await addTextSection(
     pdf,
     "Recommendations",
     currentReportData.recommendations,

@@ -21,32 +21,53 @@ const Navbar = () => {
         </button>
 
         <div className="collapse navbar-collapse" id="jobproofNavbar">
-          <div className="navbar-nav ms-auto align-items-lg-center gap-lg-2">
-            <NavLink
-              className={({ isActive }) =>
-                isActive ? "nav-link active fw-semibold" : "nav-link"
-              }
-              to="/"
-            >
-              Home
-            </NavLink>
+          <ul className="navbar-nav ms-auto align-items-lg-center gap-lg-2">
+            <li className="nav-item">
+              <NavLink
+                to="/"
+                className={({ isActive }) =>
+                  isActive ? "nav-link active fw-semibold" : "nav-link"
+                }
+              >
+                Home
+              </NavLink>
+            </li>
 
-            <NavLink
-              className={({ isActive }) =>
-                isActive ? "nav-link active fw-semibold" : "nav-link"
-              }
-              to="/reports"
-            >
-              Reports
-            </NavLink>
+            <li className="nav-item">
+              <NavLink
+                to="/business-profile"
+                className={({ isActive }) =>
+                  isActive ? "nav-link active fw-semibold" : "nav-link"
+                }
+              >
+                Business Profile
+              </NavLink>
+            </li>
 
-            <Link
-              to="/create-report"
-              className="btn btn-primary ms-lg-2 mt-2 mt-lg-0"
-            >
-              Create Report
-            </Link>
-          </div>
+            <li className="nav-item">
+              <NavLink
+                to="/reports"
+                className={({ isActive }) =>
+                  isActive ? "nav-link active fw-semibold" : "nav-link"
+                }
+              >
+                Reports
+              </NavLink>
+            </li>
+
+            <li className="nav-item">
+              <NavLink
+                to="/create-report"
+                className={({ isActive }) =>
+                  isActive
+                    ? "btn btn-primary fw-semibold"
+                    : "btn btn-outline-primary"
+                }
+              >
+                Create Report
+              </NavLink>
+            </li>
+          </ul>
         </div>
       </div>
     </nav>
