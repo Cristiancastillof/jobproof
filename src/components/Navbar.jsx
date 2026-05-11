@@ -2,10 +2,22 @@ import { Link, NavLink } from "react-router-dom";
 
 const Navbar = () => {
   return (
-    <nav className="navbar navbar-expand-lg bg-white border-bottom shadow-sm">
+    <nav className="navbar navbar-expand-lg jobproof-navbar">
       <div className="container">
-        <Link className="navbar-brand fw-bold text-primary" to="/">
-          JobProof
+        <Link className="navbar-brand jobproof-brand" to="/">
+          <span className="jobproof-logo-mark">
+            <span className="jobproof-logo-lines">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+            <span className="jobproof-logo-check">✓</span>
+          </span>
+
+          <span className="jobproof-brand-text">
+            <span>Job</span>
+            <span>Proof</span>
+          </span>
         </Link>
 
         <button
