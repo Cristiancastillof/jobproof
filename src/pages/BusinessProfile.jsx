@@ -71,6 +71,12 @@ const BusinessProfile = () => {
   };
 
   const handleClearProfile = () => {
+    const confirmClear = window.confirm(
+      "Are you sure you want to clear this business profile?"
+    );
+
+    if (!confirmClear) return;
+
     localStorage.removeItem("jobproofBusinessProfile");
     setBusinessProfile(initialBusinessProfile);
     setMessage("Business profile cleared.");
@@ -81,8 +87,8 @@ const BusinessProfile = () => {
   };
 
   return (
-    <section>
-      <div className="d-flex justify-content-between align-items-center mb-4">
+    <section className="business-profile-page">
+      <div className="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
         <div>
           <h1 className="mb-1">Business Profile</h1>
           <p className="text-muted mb-0">
@@ -90,8 +96,11 @@ const BusinessProfile = () => {
           </p>
         </div>
 
-        <div className="d-flex gap-2 flex-wrap">
-          <button className="btn btn-outline-danger" onClick={handleClearProfile}>
+        <div className="business-profile-actions d-flex gap-2 flex-wrap">
+          <button
+            className="btn btn-outline-danger"
+            onClick={handleClearProfile}
+          >
             Clear Profile
           </button>
 
@@ -109,13 +118,16 @@ const BusinessProfile = () => {
 
       <div className="row g-4">
         <div className="col-lg-6">
-          <div className="card shadow-sm">
+          <div className="card shadow-sm business-profile-card">
             <div className="card-body">
               <h2 className="h4 mb-4">Business details</h2>
 
               <div className="mb-3">
-                <label className="form-label">Business name</label>
+                <label htmlFor="businessName" className="form-label">
+                  Business name
+                </label>
                 <input
+                  id="businessName"
                   type="text"
                   className="form-control"
                   name="businessName"
@@ -126,8 +138,11 @@ const BusinessProfile = () => {
               </div>
 
               <div className="mb-3">
-                <label className="form-label">Business email</label>
+                <label htmlFor="businessEmail" className="form-label">
+                  Business email
+                </label>
                 <input
+                  id="businessEmail"
                   type="email"
                   className="form-control"
                   name="businessEmail"
@@ -138,8 +153,11 @@ const BusinessProfile = () => {
               </div>
 
               <div className="mb-3">
-                <label className="form-label">Business phone</label>
+                <label htmlFor="businessPhone" className="form-label">
+                  Business phone
+                </label>
                 <input
+                  id="businessPhone"
                   type="text"
                   className="form-control"
                   name="businessPhone"
@@ -150,8 +168,11 @@ const BusinessProfile = () => {
               </div>
 
               <div className="mb-3">
-                <label className="form-label">Default worker name</label>
+                <label htmlFor="defaultWorkerName" className="form-label">
+                  Default worker name
+                </label>
                 <input
+                  id="defaultWorkerName"
                   type="text"
                   className="form-control"
                   name="defaultWorkerName"
@@ -162,13 +183,19 @@ const BusinessProfile = () => {
               </div>
 
               <div className="mb-3">
-                <label className="form-label">Business logo</label>
+                <label htmlFor="businessLogo" className="form-label">
+                  Business logo
+                </label>
                 <input
+                  id="businessLogo"
                   type="file"
                   className="form-control"
                   accept="image/*"
                   onChange={handleLogoChange}
                 />
+                <small className="text-muted d-block mt-2">
+                  Recommended: square PNG or JPG logo.
+                </small>
               </div>
 
               {businessProfile.businessLogo && (
@@ -185,50 +212,60 @@ const BusinessProfile = () => {
         </div>
 
         <div className="col-lg-6">
-          <div className="card shadow-sm">
+          <div className="card shadow-sm business-profile-card">
             <div className="card-body">
               <h2 className="h4 mb-4">Profile preview</h2>
 
               <div className="business-profile-preview">
-                {businessProfile.businessLogo ? (
-                  <img
-                    src={businessProfile.businessLogo}
-                    alt="Business logo"
-                    className="business-logo-preview mb-3"
-                  />
-                ) : (
-                  <div className="business-logo-placeholder mb-3">
-                    No logo uploaded
-                  </div>
-                )}
+                <div className="business-profile-logo-wrapper mb-3">
+                  {businessProfile.businessLogo ? (
+                    <img
+                      src={businessProfile.businessLogo}
+                      alt="Business logo"
+                      className="business-logo-preview"
+                    />
+                  ) : (
+                    <div className="business-logo-placeholder">
+                      No logo uploaded
+                    </div>
+                  )}
+                </div>
 
-                <h3 className="h5 fw-bold">
+                <h3 className="h5 fw-bold mb-2">
                   {businessProfile.businessName || "Your Business Name"}
                 </h3>
 
-                <p className="text-muted mb-1">
-                  {businessProfile.businessEmail || "business@email.com"}
-                </p>
+                <div className="business-profile-preview-details">
+                  <p className="text-muted mb-1">
+                    {businessProfile.businessEmail || "business@email.com"}
+                  </p>
 
-                <p className="text-muted mb-1">
-                  {businessProfile.businessPhone || "Business phone"}
-                </p>
+                  <p className="text-muted mb-1">
+                    {businessProfile.businessPhone || "Business phone"}
+                  </p>
 
-                <p className="text-muted mb-0">
-                  Default worker:{" "}
-                  <strong>
-                    {businessProfile.defaultWorkerName || "Worker name"}
-                  </strong>
-                </p>
+                  <p className="text-muted mb-0">
+                    Default worker:{" "}
+                    <strong>
+                      {businessProfile.defaultWorkerName || "Worker name"}
+                    </strong>
+                  </p>
+                </div>
               </div>
             </div>
           </div>
 
           <div className="alert alert-info mt-4">
-            These details will be used later to pre-fill new reports and improve
-            the PDF header.
+            These details will be used to pre-fill new reports and improve the
+            PDF header.
           </div>
         </div>
+      </div>
+
+      <div className="mobile-business-profile-actions">
+        <button className="btn btn-primary mobile-action-button" onClick={handleSaveProfile}>
+          Save Profile
+        </button>
       </div>
     </section>
   );
