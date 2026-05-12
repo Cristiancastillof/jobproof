@@ -11,6 +11,13 @@ const TOP_CONTENT_Y = 34;
 const BOTTOM_LIMIT = PAGE_HEIGHT - FOOTER_HEIGHT - 8;
 const CONTENT_WIDTH = PAGE_WIDTH - PAGE_MARGIN * 2;
 
+const JP_NAVY = [15, 23, 42];
+const JP_BLUE = [30, 64, 175];
+const JP_AMBER = [245, 158, 11];
+const JP_SLATE = [100, 116, 139];
+const JP_LIGHT = [248, 250, 252];
+const JP_BORDER = [203, 213, 225];
+
 const formatDate = (dateString) => {
   if (!dateString) return "Not provided";
 
@@ -83,14 +90,17 @@ const addImageSafely = async (pdf, imageSrc, x, y, maxWidth, maxHeight) => {
 
     return true;
   } catch (error) {
-    console.error("Logo could not be added:", error);
+    console.error("Image could not be added:", error);
     return false;
   }
 };
 
 const addHeader = async (pdf, reportData) => {
-  pdf.setFillColor(13, 110, 253);
+  pdf.setFillColor(...JP_NAVY);
   pdf.rect(0, 0, PAGE_WIDTH, HEADER_HEIGHT, "F");
+
+  pdf.setFillColor(...JP_AMBER);
+  pdf.rect(0, HEADER_HEIGHT - 2, PAGE_WIDTH, 2, "F");
 
   let textX = PAGE_MARGIN;
 
@@ -112,7 +122,7 @@ const addHeader = async (pdf, reportData) => {
   pdf.setTextColor(255, 255, 255);
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(15);
-  pdf.text(reportData.businessName || "JobProof", textX, 11);
+  pdf.text(reportData.businessName || "JobProof", textX, 10.5);
 
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(8.5);
@@ -122,23 +132,31 @@ const addHeader = async (pdf, reportData) => {
     .join(" | ");
 
   if (contactDetails) {
-    pdf.text(contactDetails, textX, 17);
+    pdf.text(contactDetails, textX, 16.8);
   }
 
-  pdf.setFont("helvetica", "normal");
+  pdf.setFont("helvetica", "bold");
   pdf.setFontSize(9);
 
   const headerRightText = reportData.reportNumber
-    ? `Professional Job Report | ${reportData.reportNumber}`
-    : "Professional Job Report";
+    ? `JOB REPORT  |  ${reportData.reportNumber}`
+    : "JOB REPORT";
 
-  pdf.text(headerRightText, PAGE_WIDTH - PAGE_MARGIN, 12, {
+  pdf.text(headerRightText, PAGE_WIDTH - PAGE_MARGIN, 10.8, {
+    align: "right",
+  });
+
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(8);
+  pdf.setTextColor(226, 232, 240);
+
+  pdf.text("Generated with JobProof", PAGE_WIDTH - PAGE_MARGIN, 16.8, {
     align: "right",
   });
 };
 
 const addFooter = (pdf, pageNumber) => {
-  pdf.setDrawColor(220, 226, 232);
+  pdf.setDrawColor(...JP_BORDER);
   pdf.line(
     PAGE_MARGIN,
     PAGE_HEIGHT - 14,
@@ -146,11 +164,14 @@ const addFooter = (pdf, pageNumber) => {
     PAGE_HEIGHT - 14
   );
 
-  pdf.setTextColor(100, 116, 139);
+  pdf.setFillColor(...JP_AMBER);
+  pdf.rect(PAGE_MARGIN, PAGE_HEIGHT - 14.8, 18, 1.2, "F");
+
+  pdf.setTextColor(...JP_SLATE);
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(9);
 
-  pdf.text("Generated with JobProof", PAGE_MARGIN, PAGE_HEIGHT - 8);
+  pdf.text("JobProof - Professional job reports", PAGE_MARGIN, PAGE_HEIGHT - 8);
 
   pdf.text(`Page ${pageNumber}`, PAGE_WIDTH - PAGE_MARGIN, PAGE_HEIGHT - 8, {
     align: "right",
@@ -171,13 +192,16 @@ const addNewPage = async (pdf, reportData, pageNumberRef) => {
 };
 
 const addSectionTitle = (pdf, title, y) => {
-  pdf.setTextColor(17, 24, 39);
+  pdf.setTextColor(...JP_NAVY);
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(13);
   pdf.text(title, PAGE_MARGIN, y);
 
-  pdf.setDrawColor(220, 226, 232);
+  pdf.setDrawColor(...JP_BORDER);
   pdf.line(PAGE_MARGIN, y + 3, PAGE_WIDTH - PAGE_MARGIN, y + 3);
+
+  pdf.setFillColor(...JP_AMBER);
+  pdf.rect(PAGE_MARGIN, y + 2.4, 14, 1.2, "F");
 
   return y + 10;
 };
@@ -217,8 +241,8 @@ const addTextSection = async (
 };
 
 const addPhotoCard = async (pdf, photo, x, y, width, height, caption) => {
-  pdf.setFillColor(248, 250, 252);
-  pdf.setDrawColor(220, 226, 232);
+  pdf.setFillColor(...JP_LIGHT);
+  pdf.setDrawColor(...JP_BORDER);
   pdf.roundedRect(x, y, width, height, 2, 2, "FD");
 
   try {
@@ -248,7 +272,7 @@ const addPhotoCard = async (pdf, photo, x, y, width, height, caption) => {
       renderHeight
     );
   } catch (error) {
-    pdf.setTextColor(120, 120, 120);
+    pdf.setTextColor(...JP_SLATE);
     pdf.setFont("helvetica", "italic");
     pdf.setFontSize(9);
     pdf.text("Image unavailable", x + width / 2, y + height / 2, {
@@ -256,7 +280,7 @@ const addPhotoCard = async (pdf, photo, x, y, width, height, caption) => {
     });
   }
 
-  pdf.setTextColor(55, 65, 81);
+  pdf.setTextColor(...JP_NAVY);
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(8.5);
   pdf.text(caption, x + 3, y + height - 5);
@@ -277,7 +301,7 @@ const addPhotoSection = async (
   y = addSectionTitle(pdf, title, y);
 
   if (!photos || photos.length === 0) {
-    pdf.setTextColor(107, 114, 128);
+    pdf.setTextColor(...JP_SLATE);
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(10);
     pdf.text("No photos attached.", PAGE_MARGIN, y);
@@ -374,14 +398,17 @@ export const generatePDF = async (reportData) => {
       font: "helvetica",
       fontSize: 9,
       cellPadding: 3,
-      textColor: [31, 41, 55],
-      lineColor: [220, 226, 232],
+      textColor: JP_NAVY,
+      lineColor: JP_BORDER,
       lineWidth: 0.2,
     },
     headStyles: {
-      fillColor: [13, 110, 253],
+      fillColor: JP_BLUE,
       textColor: [255, 255, 255],
       fontStyle: "bold",
+    },
+    alternateRowStyles: {
+      fillColor: JP_LIGHT,
     },
     columnStyles: {
       0: {
