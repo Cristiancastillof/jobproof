@@ -91,18 +91,50 @@ const ReportForm = ({ reportData, setReportData }) => {
 
     return (
       <div className="mb-4">
-        <label htmlFor={inputId} className="form-label">
-          {title}
-        </label>
+        <label className="form-label">{title}</label>
 
-        <input
-          id={inputId}
-          type="file"
-          className="form-control"
-          accept="image/*"
-          multiple
-          onChange={(event) => handlePhotoUpload(event, photoType)}
-        />
+        <div className="photo-action-grid">
+          <div>
+            <label
+              htmlFor={`${inputId}Camera`}
+              className="btn btn-primary w-100"
+            >
+              Take photo
+            </label>
+
+            <input
+              id={`${inputId}Camera`}
+              type="file"
+              className="visually-hidden"
+              accept="image/*"
+              capture="environment"
+              onChange={(event) => handlePhotoUpload(event, photoType)}
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor={`${inputId}Gallery`}
+              className="btn btn-outline-primary w-100"
+            >
+              Upload from gallery
+            </label>
+
+            <input
+              id={`${inputId}Gallery`}
+              type="file"
+              className="visually-hidden"
+              accept="image/*"
+              multiple
+              onChange={(event) => handlePhotoUpload(event, photoType)}
+            />
+          </div>
+        </div>
+
+        <small className="text-muted d-block mt-2">
+          On mobile, Take photo opens the camera. You can add more photos one by
+          one.
+        </small>
 
         {photos.length === 0 ? (
           <p className="text-muted small mt-2 mb-0">No photos uploaded yet.</p>
