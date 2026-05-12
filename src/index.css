@@ -1513,3 +1513,69 @@ body {
     width: 100%;
   }
 }
+/* Auth pages */
+
+.auth-page {
+  min-height: calc(100vh - 180px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 0;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 480px;
+  border-radius: 28px;
+}
+
+.auth-card .card-body {
+  padding: 32px;
+}
+
+.auth-card h1 {
+  color: var(--jp-navy);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+}
+
+@media (max-width: 768px) {
+  .auth-page {
+    padding: 28px 0;
+    align-items: flex-start;
+  }
+
+  .auth-card {
+    border-radius: 22px;
+  }
+
+  .auth-card .card-body {
+    padding: 22px;
+  }
+}
+/* Navbar auth state */
+
+.navbar-user-email {
+  display: inline-flex;
+  align-items: center;
+  color: var(--jp-slate);
+  font-size: 0.86rem;
+  font-weight: 700;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .navbar-user-email {
+    width: 100%;
+    max-width: 100%;
+    padding: 10px 0;
+  }
+
+  .jobproof-navbar .btn-outline-secondary {
+    width: 100%;
+    margin-top: 8px;
+  }
+}

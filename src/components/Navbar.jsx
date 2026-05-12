@@ -1,6 +1,25 @@
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 const Navbar = () => {
+  const navigate = useNavigate();
+  const { isAuthenticated, user, signOut } = useAuth();
+
+  const displayName =
+    user?.user_metadata?.full_name ||
+    user?.email?.split("@")[0] ||
+    "User";
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      navigate("/");
+    } catch (error) {
+      console.error(error);
+      alert("There was an error signing out.");
+    }
+  };
+
   return (
     <nav className="navbar navbar-expand-lg jobproof-navbar">
       <div className="container">
@@ -45,40 +64,86 @@ const Navbar = () => {
               </NavLink>
             </li>
 
-            <li className="nav-item">
-              <NavLink
-                to="/business-profile"
-                className={({ isActive }) =>
-                  isActive ? "nav-link active fw-semibold" : "nav-link"
-                }
-              >
-                Business Profile
-              </NavLink>
-            </li>
+            {isAuthenticated ? (
+              <>
+                <li className="nav-item">
+                  <NavLink
+                    to="/business-profile"
+                    className={({ isActive }) =>
+                      isActive ? "nav-link active fw-semibold" : "nav-link"
+                    }
+                  >
+                    Business Profile
+                  </NavLink>
+                </li>
 
-            <li className="nav-item">
-              <NavLink
-                to="/reports"
-                className={({ isActive }) =>
-                  isActive ? "nav-link active fw-semibold" : "nav-link"
-                }
-              >
-                Reports
-              </NavLink>
-            </li>
+                <li className="nav-item">
+                  <NavLink
+                    to="/reports"
+                    className={({ isActive }) =>
+                      isActive ? "nav-link active fw-semibold" : "nav-link"
+                    }
+                  >
+                    Reports
+                  </NavLink>
+                </li>
 
-            <li className="nav-item">
-              <NavLink
-                to="/create-report"
-                className={({ isActive }) =>
-                  isActive
-                    ? "btn btn-primary fw-semibold"
-                    : "btn btn-outline-primary"
-                }
-              >
-                Create Report
-              </NavLink>
-            </li>
+                <li className="nav-item">
+                  <NavLink
+                    to="/create-report"
+                    className={({ isActive }) =>
+                      isActive
+                        ? "btn btn-primary fw-semibold"
+                        : "btn btn-outline-primary"
+                    }
+                  >
+                    Create Report
+                  </NavLink>
+                </li>
+
+                <li className="nav-item">
+                  <span className="navbar-user-email">
+                    {displayName}
+                  </span>
+                </li>
+
+                <li className="nav-item">
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={handleSignOut}
+                  >
+                    Sign out
+                  </button>
+                </li>
+              </>
+            ) : (
+              <>
+                <li className="nav-item">
+                  <NavLink
+                    to="/login"
+                    className={({ isActive }) =>
+                      isActive ? "nav-link active fw-semibold" : "nav-link"
+                    }
+                  >
+                    Log in
+                  </NavLink>
+                </li>
+
+                <li className="nav-item">
+                  <NavLink
+                    to="/register"
+                    className={({ isActive }) =>
+                      isActive
+                        ? "btn btn-primary fw-semibold"
+                        : "btn btn-outline-primary"
+                    }
+                  >
+                    Get started
+                  </NavLink>
+                </li>
+              </>
+            )}
           </ul>
         </div>
       </div>
