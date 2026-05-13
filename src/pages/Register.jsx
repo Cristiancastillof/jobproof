@@ -51,7 +51,7 @@ const Register = () => {
 
     setLoading(true);
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: formData.email,
       password: formData.password,
       options: {
@@ -61,9 +61,8 @@ const Register = () => {
       },
     });
 
-    setLoading(false);
-
     if (error) {
+      setLoading(false);
       setMessage({
         type: "danger",
         text: error.message,
@@ -71,14 +70,44 @@ const Register = () => {
       return;
     }
 
+    const userId = data.user?.id;
+
+    if (!userId) {
+      setLoading(false);
+      setMessage({
+        type: "warning",
+        text: "Account created, but user profile could not be prepared.",
+      });
+      return;
+    }
+
+    const { error: profileError } = await supabase.from("profiles").insert({
+      id: userId,
+      full_name: formData.fullName,
+      email: formData.email,
+      role: "admin",
+      active: true,
+    });
+
+    setLoading(false);
+
+    if (profileError) {
+      console.error(profileError);
+      setMessage({
+        type: "danger",
+        text: "Account created, but profile setup failed. Please contact support.",
+      });
+      return;
+    }
+
     setMessage({
       type: "success",
-      text: "Account created. Please check your email if confirmation is required.",
+      text: "Account created successfully. You can now log in.",
     });
 
     setTimeout(() => {
       navigate("/login");
-    }, 1200);
+    }, 1000);
   };
 
   return (

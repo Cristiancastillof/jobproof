@@ -3,12 +3,7 @@ import { useAuth } from "../context/AuthContext";
 
 const Navbar = () => {
   const navigate = useNavigate();
-  const { isAuthenticated, user, signOut } = useAuth();
-
-  const displayName =
-    user?.user_metadata?.full_name ||
-    user?.email?.split("@")[0] ||
-    "User";
+  const { isAuthenticated, displayName, displayRole, signOut } = useAuth();
 
   const handleSignOut = async () => {
     try {
@@ -103,7 +98,7 @@ const Navbar = () => {
 
                 <li className="nav-item">
                   <span className="navbar-user-email">
-                    {displayName}
+                    {displayName} · {displayRole}
                   </span>
                 </li>
 
