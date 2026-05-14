@@ -286,19 +286,19 @@ const CreateReport = () => {
           )}
         </div>
 
-        <div className="desktop-report-actions d-flex gap-2 flex-wrap">
-          <button className="btn btn-outline-danger" onClick={handleClearForm}>
-            Clear Form
-          </button>
+ <div className="desktop-report-actions d-flex gap-2 flex-wrap">
+  <button className="btn btn-primary" onClick={handleSaveReport}>
+    {isEditMode ? "Update Report" : "Save Report"}
+  </button>
 
-          <button className="btn btn-primary" onClick={handleSaveReport}>
-            {isEditMode ? "Update Report" : "Save Report"}
-          </button>
+  <button className="btn btn-success" onClick={handleDownloadPDF}>
+    Download PDF
+  </button>
 
-          <button className="btn btn-success" onClick={handleDownloadPDF}>
-            Download PDF
-          </button>
-        </div>
+  <button className="btn btn-outline-danger" onClick={handleClearForm}>
+    Clear Form
+  </button>
+</div>
 
         <div className="mobile-clear-action">
           <button className="btn btn-outline-danger" onClick={handleClearForm}>

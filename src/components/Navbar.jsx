@@ -15,6 +15,9 @@ const Navbar = () => {
     }
   };
 
+  const getNavLinkClass = ({ isActive }) =>
+    isActive ? "nav-link jp-nav-link active" : "nav-link jp-nav-link";
+
   return (
     <nav className="navbar navbar-expand-lg jobproof-navbar">
       <div className="container">
@@ -49,12 +52,7 @@ const Navbar = () => {
         <div className="collapse navbar-collapse" id="jobproofNavbar">
           <ul className="navbar-nav ms-auto align-items-lg-center gap-lg-2">
             <li className="nav-item">
-              <NavLink
-                to="/"
-                className={({ isActive }) =>
-                  isActive ? "nav-link active fw-semibold" : "nav-link"
-                }
-              >
+              <NavLink to="/" className={getNavLinkClass}>
                 Home
               </NavLink>
             </li>
@@ -62,42 +60,26 @@ const Navbar = () => {
             {isAuthenticated ? (
               <>
                 <li className="nav-item">
-                  <NavLink
-                    to="/business-profile"
-                    className={({ isActive }) =>
-                      isActive ? "nav-link active fw-semibold" : "nav-link"
-                    }
-                  >
+                  <NavLink to="/business-profile" className={getNavLinkClass}>
                     Business Profile
                   </NavLink>
                 </li>
 
                 <li className="nav-item">
-                  <NavLink
-                    to="/reports"
-                    className={({ isActive }) =>
-                      isActive ? "nav-link active fw-semibold" : "nav-link"
-                    }
-                  >
+                  <NavLink to="/reports" className={getNavLinkClass}>
                     Reports
                   </NavLink>
                 </li>
 
                 <li className="nav-item">
-                  <NavLink
-                    to="/create-report"
-                    className={({ isActive }) =>
-                      isActive
-                        ? "btn btn-primary fw-semibold"
-                        : "btn btn-outline-primary"
-                    }
-                  >
+                  <NavLink to="/create-report" className={getNavLinkClass}>
                     Create Report
                   </NavLink>
                 </li>
 
                 <li className="nav-item">
-                  <span className="navbar-user-email">
+                  <span className="jp-user-chip">
+                    <span className="jp-user-dot"></span>
                     {displayName} · {displayRole}
                   </span>
                 </li>
@@ -105,7 +87,7 @@ const Navbar = () => {
                 <li className="nav-item">
                   <button
                     type="button"
-                    className="btn btn-outline-secondary"
+                    className="btn jp-signout-button"
                     onClick={handleSignOut}
                   >
                     Sign out
@@ -115,12 +97,7 @@ const Navbar = () => {
             ) : (
               <>
                 <li className="nav-item">
-                  <NavLink
-                    to="/login"
-                    className={({ isActive }) =>
-                      isActive ? "nav-link active fw-semibold" : "nav-link"
-                    }
-                  >
+                  <NavLink to="/login" className={getNavLinkClass}>
                     Log in
                   </NavLink>
                 </li>
@@ -130,8 +107,8 @@ const Navbar = () => {
                     to="/register"
                     className={({ isActive }) =>
                       isActive
-                        ? "btn btn-primary fw-semibold"
-                        : "btn btn-outline-primary"
+                        ? "btn jp-navbar-cta active"
+                        : "btn jp-navbar-cta"
                     }
                   >
                     Get started
