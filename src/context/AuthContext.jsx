@@ -9,6 +9,24 @@ const formatRole = (role) => {
   return role.charAt(0).toUpperCase() + role.slice(1);
 };
 
+const getUserId = (userOrId) => {
+  if (!userOrId) return null;
+
+  if (typeof userOrId === "string") {
+    return userOrId;
+  }
+
+  return userOrId.id || null;
+};
+
+const getFallbackFullName = (currentUser) => {
+  return (
+    currentUser?.user_metadata?.full_name ||
+    currentUser?.email?.split("@")[0] ||
+    "User"
+  );
+};
+
 export const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
@@ -17,19 +35,14 @@ export const AuthProvider = ({ children }) => {
   const [profileLoading, setProfileLoading] = useState(false);
 
   const createMissingProfile = async (currentUser) => {
-    const fallbackFullName =
-      currentUser?.user_metadata?.full_name ||
-      currentUser?.email?.split("@")[0] ||
-      "User";
-
-    const fallbackEmail = currentUser?.email || "";
+    if (!currentUser?.id) return null;
 
     const { data, error } = await supabase
       .from("profiles")
       .insert({
         id: currentUser.id,
-        full_name: fallbackFullName,
-        email: fallbackEmail,
+        full_name: getFallbackFullName(currentUser),
+        email: currentUser.email || "",
         role: "admin",
         active: true,
       })
@@ -44,82 +57,107 @@ export const AuthProvider = ({ children }) => {
     return data;
   };
 
-  const fetchProfile = async (currentUser) => {
-    if (!currentUser?.id) {
+  const fetchProfile = async (userOrId) => {
+    const userId = getUserId(userOrId);
+
+    if (!userId) {
       setProfile(null);
+      setProfileLoading(false);
       return null;
     }
 
     setProfileLoading(true);
 
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, company_id, full_name, email, role, active")
-      .eq("id", currentUser.id)
-      .maybeSingle();
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, company_id, full_name, email, role, active")
+        .eq("id", userId)
+        .maybeSingle();
 
-    if (error) {
-      console.error("Error fetching profile:", error);
-      setProfileLoading(false);
+      if (error) {
+        console.error("Error fetching profile:", error);
+        setProfile(null);
+        return null;
+      }
+
+      if (!data && typeof userOrId !== "string") {
+        const newProfile = await createMissingProfile(userOrId);
+        setProfile(newProfile);
+        return newProfile;
+      }
+
+      setProfile(data || null);
+      return data || null;
+    } catch (error) {
+      console.error("Unexpected profile error:", error);
       setProfile(null);
       return null;
-    }
-
-    if (!data) {
-      const newProfile = await createMissingProfile(currentUser);
-      setProfile(newProfile);
+    } finally {
       setProfileLoading(false);
-      return newProfile;
     }
-
-    setProfile(data);
-    setProfileLoading(false);
-    return data;
   };
 
   useEffect(() => {
+    let isMounted = true;
+
     const getInitialSession = async () => {
-      const { data, error } = await supabase.auth.getSession();
+      try {
+        const { data, error } = await supabase.auth.getSession();
 
-      if (error) {
-        console.error("Error getting Supabase session:", error);
-      }
+        if (error) {
+          console.error("Error getting Supabase session:", error);
+        }
 
-      const currentSession = data.session || null;
-      const currentUser = currentSession?.user || null;
+        if (!isMounted) return;
 
-      setSession(currentSession);
-      setUser(currentUser);
+        const currentSession = data.session || null;
+        const currentUser = currentSession?.user || null;
 
-      if (currentUser) {
-        await fetchProfile(currentUser);
-      } else {
+        setSession(currentSession);
+        setUser(currentUser);
+
+        if (currentUser) {
+          await fetchProfile(currentUser);
+        } else {
+          setProfile(null);
+          setProfileLoading(false);
+        }
+      } catch (error) {
+        console.error("Unexpected auth error:", error);
+        setSession(null);
+        setUser(null);
         setProfile(null);
+        setProfileLoading(false);
+      } finally {
+        if (isMounted) {
+          setAuthLoading(false);
+        }
       }
-
-      setAuthLoading(false);
     };
 
     getInitialSession();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, currentSession) => {
+    } = supabase.auth.onAuthStateChange((_event, currentSession) => {
       const currentUser = currentSession?.user || null;
 
       setSession(currentSession);
       setUser(currentUser);
 
       if (currentUser) {
-        await fetchProfile(currentUser);
+        fetchProfile(currentUser);
       } else {
         setProfile(null);
+        setProfileLoading(false);
       }
 
       setAuthLoading(false);
     });
 
     return () => {
+      isMounted = false;
       subscription.unsubscribe();
     };
   }, []);
@@ -135,6 +173,7 @@ export const AuthProvider = ({ children }) => {
     setSession(null);
     setUser(null);
     setProfile(null);
+    setProfileLoading(false);
   };
 
   const displayName =

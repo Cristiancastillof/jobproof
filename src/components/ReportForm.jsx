@@ -23,30 +23,6 @@ const ReportForm = ({ reportData, setReportData }) => {
     setReportData(updatedReportData);
   };
 
-  const handleBusinessLogoChange = (event) => {
-    const file = event.target.files[0];
-
-    if (!file) return;
-
-    const reader = new FileReader();
-
-    reader.onload = () => {
-      setReportData({
-        ...reportData,
-        businessLogo: reader.result,
-      });
-    };
-
-    reader.readAsDataURL(file);
-  };
-
-  const handleRemoveBusinessLogo = () => {
-    setReportData({
-      ...reportData,
-      businessLogo: "",
-    });
-  };
-
   const handlePhotoUpload = (event, photoType) => {
     const files = Array.from(event.target.files);
 
@@ -168,102 +144,21 @@ const ReportForm = ({ reportData, setReportData }) => {
   return (
     <div className="card shadow-sm">
       <div className="card-body">
-        <h2 className="h4 mb-4">Report information</h2>
+        <h2 className="h4 mb-4">Job report information</h2>
 
-        <div className="mb-4">
-          <h3 className="h5 mb-3">Business details</h3>
-
-          <div className="mb-3">
-            <label htmlFor="businessName" className="form-label">
-              Business name
-            </label>
-            <input
-              id="businessName"
-              type="text"
-              className="form-control"
-              name="businessName"
-              value={reportData.businessName}
-              onChange={handleChange}
-              placeholder="Example: CleanPro Melbourne"
-            />
-          </div>
-
-          <div className="mb-3">
-            <label htmlFor="businessEmail" className="form-label">
-              Business email
-            </label>
-            <input
-              id="businessEmail"
-              type="email"
-              className="form-control"
-              name="businessEmail"
-              value={reportData.businessEmail}
-              onChange={handleChange}
-              placeholder="Example: hello@cleanpro.com.au"
-            />
-          </div>
-
-          <div className="mb-3">
-            <label htmlFor="businessPhone" className="form-label">
-              Business phone
-            </label>
-            <input
-              id="businessPhone"
-              type="text"
-              className="form-control"
-              name="businessPhone"
-              value={reportData.businessPhone}
-              onChange={handleChange}
-              placeholder="Example: 0400 000 000"
-            />
-          </div>
-
-          <div className="mb-3">
-            <label htmlFor="workerName" className="form-label">
-              Worker name
-            </label>
-            <input
-              id="workerName"
-              type="text"
-              className="form-control"
-              name="workerName"
-              value={reportData.workerName}
-              onChange={handleChange}
-              placeholder="Example: Cris Castillo"
-            />
-          </div>
-
-          <div className="mb-3">
-            <label htmlFor="businessLogo" className="form-label">
-              Business logo
-            </label>
-            <input
-              id="businessLogo"
-              type="file"
-              className="form-control"
-              accept="image/*"
-              onChange={handleBusinessLogoChange}
-            />
-          </div>
-
-          {reportData.businessLogo && (
-            <div className="border rounded p-3 bg-light mb-3">
-              <p className="small text-muted mb-2">Current logo</p>
-
-              <img
-                src={reportData.businessLogo}
-                alt="Business logo"
-                className="business-logo-preview mb-3"
-              />
-
-              <button
-                type="button"
-                className="btn btn-sm btn-outline-danger d-block"
-                onClick={handleRemoveBusinessLogo}
-              >
-                Remove logo
-              </button>
-            </div>
+        <div className="alert alert-info">
+          <strong>Company profile loaded automatically.</strong>
+          <br />
+          Reports will use{" "}
+          <strong>{reportData.businessName || "your saved company"}</strong>
+          {reportData.workerName ? (
+            <>
+              {" "}
+              and will be marked as completed by{" "}
+              <strong>{reportData.workerName}</strong>.
+            </>
+          ) : (
+            "."
           )}
         </div>
 
