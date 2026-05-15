@@ -26,6 +26,8 @@ const createEmptyReport = () => ({
   businessPhone: "",
   businessLogo: "",
   workerName: "",
+  createdBy: "",
+  teamInvolved: [],
   clientName: "",
   jobAddress: "",
   jobDate: getTodayDate(),
@@ -47,7 +49,13 @@ const createEmptyPhotoFiles = () => ({
   afterPhotos: [],
 });
 
-const mapSupabaseReportToForm = (report, company, workerName, photos = []) => {
+const mapSupabaseReportToForm = ({
+  report,
+  company,
+  workerName,
+  photos = [],
+  teamInvolved = [],
+}) => {
   const beforePhotos = photos
     .filter((photo) => photo.photo_type === "before")
     .sort((a, b) => a.photo_order - b.photo_order)
@@ -66,6 +74,8 @@ const mapSupabaseReportToForm = (report, company, workerName, photos = []) => {
     businessPhone: company?.business_phone || "",
     businessLogo: company?.business_logo_url || "",
     workerName: workerName || "",
+    createdBy: report.created_by || "",
+    teamInvolved,
     clientName: report.client_name || "",
     jobAddress: report.job_address || "",
     jobDate: report.job_date || getTodayDate(),
@@ -181,6 +191,12 @@ const getFileExtension = (file) => {
   return "jpg";
 };
 
+const getRoleOnJob = (member, creatorId) => {
+  if (member.id === creatorId) return "lead";
+  if (member.role === "supervisor") return "supervisor";
+  return "worker";
+};
+
 const CreateReport = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -191,6 +207,8 @@ const CreateReport = () => {
   const [reportData, setReportData] = useState(createEmptyReport);
   const [photoFiles, setPhotoFiles] = useState(createEmptyPhotoFiles);
   const [company, setCompany] = useState(null);
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [selectedWorkerIds, setSelectedWorkerIds] = useState([]);
   const [loadingReport, setLoadingReport] = useState(true);
   const [savingReport, setSavingReport] = useState(false);
   const [message, setMessage] = useState(null);
@@ -198,6 +216,20 @@ const CreateReport = () => {
   const canCreateReport = useMemo(() => {
     return Boolean(user?.id && profile?.company_id);
   }, [user, profile]);
+
+  const selectedTeamMembers = useMemo(() => {
+    return teamMembers.filter((member) => selectedWorkerIds.includes(member.id));
+  }, [teamMembers, selectedWorkerIds]);
+
+  const normalizeSelectedWorkerIds = (workerIds = []) => {
+    const uniqueIds = Array.from(new Set(workerIds.filter(Boolean)));
+
+    if (user?.id && !uniqueIds.includes(user.id)) {
+      return [user.id, ...uniqueIds];
+    }
+
+    return uniqueIds;
+  };
 
   useEffect(() => {
     const loadCompanyAndReport = async () => {
@@ -236,6 +268,20 @@ const CreateReport = () => {
 
         setCompany(companyData);
 
+        const { data: membersData, error: membersError } = await supabase
+          .from("profiles")
+          .select("id, full_name, email, role, active")
+          .eq("company_id", profile.company_id)
+          .eq("active", true)
+          .order("full_name", { ascending: true });
+
+        if (membersError) {
+          throw membersError;
+        }
+
+        const loadedMembers = membersData || [];
+        setTeamMembers(loadedMembers);
+
         if (isEditMode) {
           let reportQuery = supabase
             .from("reports")
@@ -265,16 +311,79 @@ const CreateReport = () => {
             throw photosError;
           }
 
+          const { data: existingReportWorkers, error: workersError } =
+            await supabase
+              .from("report_workers")
+              .select(
+                `
+                id,
+                profile_id,
+                role_on_job,
+                profiles:profile_id (
+                  id,
+                  full_name,
+                  email,
+                  role
+                )
+              `
+              )
+              .eq("report_id", id)
+              .eq("company_id", profile.company_id);
+
+          if (workersError) {
+            throw workersError;
+          }
+
+          const existingWorkerIds = (existingReportWorkers || []).map(
+            (worker) => worker.profile_id
+          );
+
+          const normalizedWorkerIds = normalizeSelectedWorkerIds(
+            existingWorkerIds.length > 0
+              ? existingWorkerIds
+              : [existingReport.created_by]
+          );
+
+          setSelectedWorkerIds(normalizedWorkerIds);
+
+          const mappedTeamInvolved = (existingReportWorkers || [])
+            .map((worker) => ({
+              id: worker.profiles?.id || worker.profile_id,
+              fullName: worker.profiles?.full_name || "Unknown user",
+              email: worker.profiles?.email || "",
+              role: worker.profiles?.role || "worker",
+              roleOnJob: worker.role_on_job || "worker",
+            }))
+            .sort((a, b) => {
+              if (a.roleOnJob === "lead") return -1;
+              if (b.roleOnJob === "lead") return 1;
+              return a.fullName.localeCompare(b.fullName);
+            });
+
           setReportData(
-            mapSupabaseReportToForm(
-              existingReport,
-              companyData,
-              displayName,
-              existingPhotos || []
-            )
+            mapSupabaseReportToForm({
+              report: existingReport,
+              company: companyData,
+              workerName: displayName,
+              photos: existingPhotos || [],
+              teamInvolved: mappedTeamInvolved,
+            })
           );
         } else {
           const reportNumber = await generateReportNumber(profile.company_id);
+          const initialSelectedWorkers = normalizeSelectedWorkerIds([user.id]);
+
+          setSelectedWorkerIds(initialSelectedWorkers);
+
+          const initialTeamInvolved = loadedMembers
+            .filter((member) => initialSelectedWorkers.includes(member.id))
+            .map((member) => ({
+              id: member.id,
+              fullName: member.full_name || "Unknown user",
+              email: member.email || "",
+              role: member.role || "worker",
+              roleOnJob: member.id === user.id ? "lead" : "worker",
+            }));
 
           setReportData({
             ...createEmptyReport(),
@@ -284,6 +393,8 @@ const CreateReport = () => {
             businessPhone: companyData.business_phone || "",
             businessLogo: companyData.business_logo_url || "",
             workerName: displayName || "",
+            createdBy: user.id,
+            teamInvolved: initialTeamInvolved,
             jobDate: getTodayDate(),
           });
         }
@@ -303,6 +414,37 @@ const CreateReport = () => {
 
     loadCompanyAndReport();
   }, [id, isEditMode, user, profile, profileLoading, displayName]);
+
+  useEffect(() => {
+    if (!user?.id || teamMembers.length === 0) return;
+
+    const normalizedWorkerIds = normalizeSelectedWorkerIds(selectedWorkerIds);
+
+    if (normalizedWorkerIds.join(",") !== selectedWorkerIds.join(",")) {
+      setSelectedWorkerIds(normalizedWorkerIds);
+      return;
+    }
+
+    const teamInvolved = teamMembers
+      .filter((member) => normalizedWorkerIds.includes(member.id))
+      .map((member) => ({
+        id: member.id,
+        fullName: member.full_name || "Unknown user",
+        email: member.email || "",
+        role: member.role || "worker",
+        roleOnJob: getRoleOnJob(member, reportData.createdBy || user.id),
+      }))
+      .sort((a, b) => {
+        if (a.roleOnJob === "lead") return -1;
+        if (b.roleOnJob === "lead") return 1;
+        return a.fullName.localeCompare(b.fullName);
+      });
+
+    setReportData((currentReportData) => ({
+      ...currentReportData,
+      teamInvolved,
+    }));
+  }, [selectedWorkerIds, teamMembers, user?.id, reportData.createdBy]);
 
   const deleteRemovedSupabasePhotos = async (reportId, currentReportData) => {
     const { data: savedPhotos, error } = await supabase
@@ -430,6 +572,57 @@ const CreateReport = () => {
     };
   };
 
+  const syncReportWorkers = async (reportId, createdBy) => {
+    const normalizedWorkerIds = normalizeSelectedWorkerIds(selectedWorkerIds);
+
+    const selectedMembers = teamMembers.filter((member) =>
+      normalizedWorkerIds.includes(member.id)
+    );
+
+    const { error: deleteError } = await supabase
+      .from("report_workers")
+      .delete()
+      .eq("report_id", reportId)
+      .eq("company_id", profile.company_id);
+
+    if (deleteError) {
+      throw deleteError;
+    }
+
+    if (selectedMembers.length === 0) {
+      return [];
+    }
+
+    const rowsToInsert = selectedMembers.map((member) => ({
+      report_id: reportId,
+      company_id: profile.company_id,
+      profile_id: member.id,
+      role_on_job: getRoleOnJob(member, createdBy),
+    }));
+
+    const { error: insertError } = await supabase
+      .from("report_workers")
+      .insert(rowsToInsert);
+
+    if (insertError) {
+      throw insertError;
+    }
+
+    return selectedMembers
+      .map((member) => ({
+        id: member.id,
+        fullName: member.full_name || "Unknown user",
+        email: member.email || "",
+        role: member.role || "worker",
+        roleOnJob: getRoleOnJob(member, createdBy),
+      }))
+      .sort((a, b) => {
+        if (a.roleOnJob === "lead") return -1;
+        if (b.roleOnJob === "lead") return 1;
+        return a.fullName.localeCompare(b.fullName);
+      });
+  };
+
   const handleSaveReport = async () => {
     if (!canCreateReport) {
       setMessage({
@@ -508,6 +701,11 @@ const CreateReport = () => {
         reportData
       );
 
+      const savedTeamInvolved = await syncReportWorkers(
+        savedReport.id,
+        savedReport.created_by
+      );
+
       const finalReportData = {
         ...reportWithUploadedPhotos,
         id: savedReport.id,
@@ -517,12 +715,15 @@ const CreateReport = () => {
         businessPhone: company?.business_phone || reportData.businessPhone,
         businessLogo: company?.business_logo_url || reportData.businessLogo,
         workerName: displayName || reportData.workerName,
+        createdBy: savedReport.created_by,
+        teamInvolved: savedTeamInvolved,
         totalHours: savedReport.total_hours || finalTotalHours,
         createdAt: savedReport.created_at,
         updatedAt: savedReport.updated_at,
       };
 
       setReportData(finalReportData);
+      setSelectedWorkerIds(savedTeamInvolved.map((member) => member.id));
       setPhotoFiles(createEmptyPhotoFiles());
       saveLocalReportCopy(finalReportData);
 
@@ -532,10 +733,10 @@ const CreateReport = () => {
       setMessage({
         type: "success",
         text: hasNewPhotos
-          ? "Report and photos saved successfully."
+          ? "Report, team and photos saved successfully."
           : isEditMode
-          ? "Report updated successfully."
-          : "Report saved successfully.",
+          ? "Report and team updated successfully."
+          : "Report and team saved successfully.",
       });
 
       if (!isEditMode) {
@@ -570,6 +771,20 @@ const CreateReport = () => {
       ? await generateReportNumber(profile.company_id)
       : "";
 
+    const initialSelectedWorkers = normalizeSelectedWorkerIds([user.id]);
+
+    const initialTeamInvolved = teamMembers
+      .filter((member) => initialSelectedWorkers.includes(member.id))
+      .map((member) => ({
+        id: member.id,
+        fullName: member.full_name || "Unknown user",
+        email: member.email || "",
+        role: member.role || "worker",
+        roleOnJob: member.id === user.id ? "lead" : "worker",
+      }));
+
+    setSelectedWorkerIds(initialSelectedWorkers);
+
     setReportData({
       ...createEmptyReport(),
       reportNumber,
@@ -578,6 +793,8 @@ const CreateReport = () => {
       businessPhone: company?.business_phone || "",
       businessLogo: company?.business_logo_url || "",
       workerName: displayName || "",
+      createdBy: user.id,
+      teamInvolved: initialTeamInvolved,
       jobDate: getTodayDate(),
     });
 
@@ -706,6 +923,9 @@ const CreateReport = () => {
             setReportData={setReportData}
             photoFiles={photoFiles}
             setPhotoFiles={setPhotoFiles}
+            teamMembers={teamMembers}
+            selectedWorkerIds={selectedWorkerIds}
+            setSelectedWorkerIds={setSelectedWorkerIds}
           />
         </div>
 

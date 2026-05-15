@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import ReportPreview from "../components/ReportPreview";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
@@ -12,8 +12,9 @@ const getTodayDate = () => {
 const mapSupabaseReportToPreview = ({
   report,
   company,
+  creator,
   photos = [],
-  workerName,
+  teamInvolved = [],
 }) => {
   const beforePhotos = photos
     .filter((photo) => photo.photo_type === "before")
@@ -32,7 +33,9 @@ const mapSupabaseReportToPreview = ({
     businessEmail: company?.business_email || "",
     businessPhone: company?.business_phone || "",
     businessLogo: company?.business_logo_url || "",
-    workerName: workerName || "Unknown user",
+    workerName: creator?.full_name || "Unknown user",
+    createdBy: report.created_by || "",
+    teamInvolved,
     clientName: report.client_name || "",
     jobAddress: report.job_address || "",
     jobDate: report.job_date || getTodayDate(),
@@ -50,48 +53,28 @@ const mapSupabaseReportToPreview = ({
   };
 };
 
-const formatDateTime = (dateValue) => {
-  if (!dateValue) return "Not available";
-
-  const date = new Date(dateValue);
-
-  if (Number.isNaN(date.getTime())) {
-    return "Not available";
-  }
-
-  return date.toLocaleString("en-AU", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
-
 const ReportDetails = () => {
   const { id } = useParams();
-  const navigate = useNavigate();
   const { user, profile, profileLoading } = useAuth();
 
   const [reportData, setReportData] = useState(null);
-  const [rawReport, setRawReport] = useState(null);
   const [loadingReport, setLoadingReport] = useState(true);
   const [message, setMessage] = useState(null);
 
+  const canEditReport =
+    profile?.role === "admin" ||
+    profile?.role === "supervisor" ||
+    reportData?.createdBy === user?.id;
+
   useEffect(() => {
-    const loadReportDetails = async () => {
+    const loadReport = async () => {
       if (profileLoading) return;
 
-      if (!user?.id) {
-        setLoadingReport(false);
-        return;
-      }
-
-      if (!profile?.company_id) {
+      if (!user?.id || !profile?.company_id) {
         setLoadingReport(false);
         setMessage({
           type: "warning",
-          text: "Please complete your Business Profile before viewing reports.",
+          text: "You need a company profile to view reports.",
         });
         return;
       }
@@ -102,21 +85,16 @@ const ReportDetails = () => {
       try {
         let reportQuery = supabase
           .from("reports")
-          .select(
-            `
-            *,
-            profiles:created_by (
-              full_name,
-              email,
-              role
-            )
-          `
-          )
+          .select("*")
           .eq("id", id)
           .eq("company_id", profile.company_id);
 
         if (profile.role === "worker") {
-          reportQuery = reportQuery.eq("created_by", user.id);
+          /*
+            Workers can view reports they created or reports where they are
+            involved through RLS. We do not add created_by here because the
+            database policy already protects access.
+          */
         }
 
         const { data: report, error: reportError } =
@@ -126,38 +104,93 @@ const ReportDetails = () => {
           throw reportError;
         }
 
-        const { data: company, error: companyError } = await supabase
-          .from("companies")
-          .select(
-            "id, business_name, business_email, business_phone, business_logo_url"
-          )
-          .eq("id", profile.company_id)
-          .single();
+        const [
+          { data: company, error: companyError },
+          { data: creator, error: creatorError },
+          { data: photos, error: photosError },
+          { data: reportWorkers, error: workersError },
+        ] = await Promise.all([
+          supabase
+            .from("companies")
+            .select(
+              "id, business_name, business_email, business_phone, business_logo_url"
+            )
+            .eq("id", report.company_id)
+            .single(),
 
-        if (companyError) {
-          throw companyError;
-        }
+          supabase
+            .from("profiles")
+            .select("id, full_name, email, role")
+            .eq("id", report.created_by)
+            .single(),
 
-        const { data: photos, error: photosError } = await supabase
-          .from("report_photos")
-          .select("id, photo_type, photo_url, photo_order")
-          .eq("report_id", id)
-          .eq("company_id", profile.company_id)
-          .order("photo_order", { ascending: true });
+          supabase
+            .from("report_photos")
+            .select("id, photo_type, photo_url, photo_order")
+            .eq("report_id", report.id)
+            .eq("company_id", profile.company_id)
+            .order("photo_order", { ascending: true }),
 
-        if (photosError) {
-          throw photosError;
-        }
+          supabase
+            .from("report_workers")
+            .select(
+              `
+              id,
+              profile_id,
+              role_on_job,
+              profiles:profile_id (
+                id,
+                full_name,
+                email,
+                role
+              )
+            `
+            )
+            .eq("report_id", report.id)
+            .eq("company_id", profile.company_id),
+        ]);
 
-        const mappedReport = mapSupabaseReportToPreview({
-          report,
-          company,
-          photos: photos || [],
-          workerName: report.profiles?.full_name,
-        });
+        if (companyError) throw companyError;
+        if (creatorError) throw creatorError;
+        if (photosError) throw photosError;
+        if (workersError) throw workersError;
 
-        setRawReport(report);
-        setReportData(mappedReport);
+        const mappedTeamInvolved = (reportWorkers || [])
+          .map((worker) => ({
+            id: worker.profiles?.id || worker.profile_id,
+            fullName: worker.profiles?.full_name || "Unknown user",
+            email: worker.profiles?.email || "",
+            role: worker.profiles?.role || "worker",
+            roleOnJob: worker.role_on_job || "worker",
+          }))
+          .sort((a, b) => {
+            if (a.roleOnJob === "lead") return -1;
+            if (b.roleOnJob === "lead") return 1;
+            return a.fullName.localeCompare(b.fullName);
+          });
+
+        const finalTeamInvolved =
+          mappedTeamInvolved.length > 0
+            ? mappedTeamInvolved
+            : [
+                {
+                  id: creator.id,
+                  fullName: creator.full_name || "Unknown user",
+                  email: creator.email || "",
+                  role: creator.role || "worker",
+                  roleOnJob: "lead",
+                },
+              ];
+
+        setReportData(
+          mapSupabaseReportToPreview({
+            report,
+            company,
+            creator,
+            photos: photos || [],
+            teamInvolved: finalTeamInvolved,
+          })
+        );
       } catch (error) {
         console.error("Error loading report details:", error);
 
@@ -172,17 +205,12 @@ const ReportDetails = () => {
       }
     };
 
-    loadReportDetails();
+    loadReport();
   }, [id, user, profile, profileLoading]);
 
   const handleDownloadPDF = () => {
     if (!reportData) return;
-
     generatePDF(reportData);
-  };
-
-  const handleBack = () => {
-    navigate("/reports");
   };
 
   if (loadingReport || profileLoading) {
@@ -192,7 +220,7 @@ const ReportDetails = () => {
           <span className="visually-hidden">Loading...</span>
         </div>
 
-        <h1 className="h5">Loading report details</h1>
+        <h1 className="h5">Loading report</h1>
 
         <p className="text-muted mb-0">
           Please wait while JobProof loads this report.
@@ -208,7 +236,7 @@ const ReportDetails = () => {
           <div className="card-body p-4 p-md-5 text-center">
             <p className="eyebrow mb-2">Report details</p>
 
-            <h1 className="h3 mb-3">Report not found</h1>
+            <h1 className="h3 mb-3">Report not available</h1>
 
             <p className="text-muted mb-4">
               {message?.text ||
@@ -235,19 +263,23 @@ const ReportDetails = () => {
           </h1>
 
           <p className="section-subtitle mb-0">
-            {reportData.clientName || "No client added"} ·{" "}
-            {reportData.serviceType || "No service added"}
+            View, download or edit this saved JobProof report.
           </p>
         </div>
 
-        <div className="desktop-report-actions d-flex gap-2 flex-wrap">
-          <button className="btn btn-outline-secondary" onClick={handleBack}>
-            Back
-          </button>
-
-          <Link to={`/edit-report/${reportData.id}`} className="btn btn-primary">
-            Edit Report
+        <div className="d-flex gap-2 flex-wrap">
+          <Link to="/reports" className="btn btn-outline-secondary">
+            Back to Reports
           </Link>
+
+          {canEditReport && (
+            <Link
+              to={`/edit-report/${reportData.id}`}
+              className="btn btn-primary"
+            >
+              Edit Report
+            </Link>
+          )}
 
           <button className="btn btn-success" onClick={handleDownloadPDF}>
             Download PDF
@@ -261,95 +293,10 @@ const ReportDetails = () => {
         </div>
       )}
 
-      <div className="row g-4">
-        <div className="col-lg-4">
-          <div className="card shadow-sm border-0 mb-4">
-            <div className="card-body p-4">
-              <h2 className="h5 mb-3">Report summary</h2>
-
-              <div className="report-meta-list">
-                <div>
-                  <span>Report number</span>
-                  <strong>{reportData.reportNumber || "Not available"}</strong>
-                </div>
-
-                <div>
-                  <span>Status</span>
-                  <strong className="text-capitalize">
-                    {rawReport?.status || "completed"}
-                  </strong>
-                </div>
-
-                <div>
-                  <span>Client</span>
-                  <strong>{reportData.clientName || "Not specified"}</strong>
-                </div>
-
-                <div>
-                  <span>Address</span>
-                  <strong>{reportData.jobAddress || "Not specified"}</strong>
-                </div>
-
-                <div>
-                  <span>Service</span>
-                  <strong>{reportData.serviceType || "Not specified"}</strong>
-                </div>
-
-                <div>
-                  <span>Completed by</span>
-                  <strong>{reportData.workerName || "Unknown user"}</strong>
-                </div>
-
-                <div>
-                  <span>Total hours</span>
-                  <strong>{reportData.totalHours || "Not recorded"}</strong>
-                </div>
-
-                <div>
-                  <span>Created</span>
-                  <strong>{formatDateTime(reportData.createdAt)}</strong>
-                </div>
-
-                <div>
-                  <span>Last updated</span>
-                  <strong>{formatDateTime(reportData.updatedAt)}</strong>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="card shadow-sm border-0">
-            <div className="card-body p-4">
-              <h2 className="h5 mb-3">Photos</h2>
-
-              <div className="report-meta-list">
-                <div>
-                  <span>Before photos</span>
-                  <strong>{reportData.beforePhotos.length}</strong>
-                </div>
-
-                <div>
-                  <span>After photos</span>
-                  <strong>{reportData.afterPhotos.length}</strong>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="col-lg-8">
+      <div className="row justify-content-center">
+        <div className="col-lg-9 col-xl-8">
           <ReportPreview reportData={reportData} />
         </div>
-      </div>
-
-      <div className="mobile-report-action-bar">
-        <Link to={`/edit-report/${reportData.id}`} className="btn btn-primary">
-          Edit
-        </Link>
-
-        <button className="btn btn-success" onClick={handleDownloadPDF}>
-          PDF
-        </button>
       </div>
     </section>
   );

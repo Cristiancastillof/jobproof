@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 
 const formatDate = (dateValue) => {
-  if (!dateValue) return "Not specified";
+  if (!dateValue) return "Not provided";
 
   const date = new Date(`${dateValue}T00:00:00`);
 
@@ -35,47 +35,106 @@ const formatCreatedAt = (dateValue) => {
   });
 };
 
-const getStatusBadgeClass = (status) => {
-  if (status === "approved") return "bg-success";
-  if (status === "submitted") return "bg-primary";
-  if (status === "draft") return "bg-secondary";
-  if (status === "archived") return "bg-dark";
+const getTeamSummary = (teamInvolved = [], creatorName = "") => {
+  if (!teamInvolved || teamInvolved.length === 0) {
+    return creatorName || "Not recorded";
+  }
 
-  return "bg-info text-dark";
+  const sortedTeam = [...teamInvolved].sort((a, b) => {
+    if (a.roleOnJob === "lead") return -1;
+    if (b.roleOnJob === "lead") return 1;
+    return a.fullName.localeCompare(b.fullName);
+  });
+
+  const firstPerson = sortedTeam[0]?.fullName || creatorName || "Team member";
+  const othersCount = sortedTeam.length - 1;
+
+  if (othersCount <= 0) {
+    return firstPerson;
+  }
+
+  return `${firstPerson} + ${othersCount} ${othersCount === 1 ? "other" : "others"}`;
 };
 
-const getRoleDescription = (role) => {
-  if (role === "admin") {
-    return "You can view and manage all company reports.";
-  }
+const mapReportRow = (report) => {
+  const creator = report.creator;
 
-  if (role === "supervisor") {
-    return "You can view and manage reports across your company.";
-  }
+  const teamInvolved = (report.report_workers || [])
+    .map((worker) => ({
+      id: worker.profiles?.id || worker.profile_id,
+      fullName: worker.profiles?.full_name || "Unknown user",
+      email: worker.profiles?.email || "",
+      role: worker.profiles?.role || "worker",
+      roleOnJob: worker.role_on_job || "worker",
+    }))
+    .sort((a, b) => {
+      if (a.roleOnJob === "lead") return -1;
+      if (b.roleOnJob === "lead") return 1;
+      return a.fullName.localeCompare(b.fullName);
+    });
 
-  return "You can view and manage reports created by you.";
+  const fallbackTeam =
+    teamInvolved.length > 0
+      ? teamInvolved
+      : [
+          {
+            id: creator?.id || report.created_by,
+            fullName: creator?.full_name || "Unknown user",
+            email: creator?.email || "",
+            role: creator?.role || "worker",
+            roleOnJob: "lead",
+          },
+        ];
+
+  return {
+    id: report.id,
+    reportNumber: report.report_number || "No number",
+    clientName: report.client_name || "Not provided",
+    jobAddress: report.job_address || "Not provided",
+    jobDate: report.job_date || "",
+    serviceType: report.service_type || "Not provided",
+    totalHours: report.total_hours || "Not calculated",
+    status: report.status || "completed",
+    createdAt: report.created_at || "",
+    createdBy: report.created_by || "",
+    creatorName: creator?.full_name || "Unknown user",
+    teamInvolved: fallbackTeam,
+    teamSummary: getTeamSummary(fallbackTeam, creator?.full_name),
+  };
 };
 
 const Reports = () => {
-  const { user, profile, displayRole, profileLoading } = useAuth();
+  const { user, profile, profileLoading } = useAuth();
 
   const [reports, setReports] = useState([]);
-  const [loadingReports, setLoadingReports] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [loadingReports, setLoadingReports] = useState(true);
   const [message, setMessage] = useState(null);
 
   const isWorker = profile?.role === "worker";
+
+  const filteredReports = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    if (!normalizedSearch) return reports;
+
+    return reports.filter((report) => {
+      return (
+        report.reportNumber.toLowerCase().includes(normalizedSearch) ||
+        report.clientName.toLowerCase().includes(normalizedSearch) ||
+        report.jobAddress.toLowerCase().includes(normalizedSearch) ||
+        report.serviceType.toLowerCase().includes(normalizedSearch) ||
+        report.creatorName.toLowerCase().includes(normalizedSearch) ||
+        report.teamSummary.toLowerCase().includes(normalizedSearch)
+      );
+    });
+  }, [reports, searchTerm]);
 
   useEffect(() => {
     const loadReports = async () => {
       if (profileLoading) return;
 
-      if (!user?.id) {
-        setLoadingReports(false);
-        return;
-      }
-
-      if (!profile?.company_id) {
+      if (!user?.id || !profile?.company_id) {
         setLoadingReports(false);
         setMessage({
           type: "warning",
@@ -88,11 +147,13 @@ const Reports = () => {
       setMessage(null);
 
       try {
-        let reportsQuery = supabase
+        const { data, error } = await supabase
           .from("reports")
           .select(
             `
             id,
+            company_id,
+            created_by,
             report_number,
             client_name,
             job_address,
@@ -101,29 +162,35 @@ const Reports = () => {
             total_hours,
             status,
             created_at,
-            updated_at,
-            created_by,
-            profiles:created_by (
+            creator:created_by (
+              id,
               full_name,
               email,
               role
+            ),
+            report_workers (
+              id,
+              profile_id,
+              role_on_job,
+              profiles:profile_id (
+                id,
+                full_name,
+                email,
+                role
+              )
             )
           `
           )
           .eq("company_id", profile.company_id)
           .order("created_at", { ascending: false });
 
-        if (profile.role === "worker") {
-          reportsQuery = reportsQuery.eq("created_by", user.id);
-        }
-
-        const { data, error } = await reportsQuery;
-
         if (error) {
           throw error;
         }
 
-        setReports(data || []);
+        const mappedReports = (data || []).map(mapReportRow);
+
+        setReports(mappedReports);
       } catch (error) {
         console.error("Error loading reports:", error);
 
@@ -139,28 +206,43 @@ const Reports = () => {
     loadReports();
   }, [user, profile, profileLoading]);
 
-  const filteredReports = useMemo(() => {
-    const normalizedSearch = searchTerm.trim().toLowerCase();
+  const handleDeleteReport = async (reportId) => {
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this report? This action cannot be undone."
+    );
 
-    if (!normalizedSearch) return reports;
+    if (!confirmDelete) return;
 
-    return reports.filter((report) => {
-      const searchableText = [
-        report.report_number,
-        report.client_name,
-        report.job_address,
-        report.service_type,
-        report.status,
-        report.profiles?.full_name,
-        report.profiles?.email,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+    try {
+      const { error } = await supabase
+        .from("reports")
+        .delete()
+        .eq("id", reportId)
+        .eq("company_id", profile.company_id);
 
-      return searchableText.includes(normalizedSearch);
-    });
-  }, [reports, searchTerm]);
+      if (error) {
+        throw error;
+      }
+
+      setReports((currentReports) =>
+        currentReports.filter((report) => report.id !== reportId)
+      );
+
+      setMessage({
+        type: "success",
+        text: "Report deleted successfully.",
+      });
+    } catch (error) {
+      console.error("Error deleting report:", error);
+
+      setMessage({
+        type: "danger",
+        text:
+          error.message ||
+          "There was an error deleting this report. Please check your permissions.",
+      });
+    }
+  };
 
   if (loadingReports || profileLoading) {
     return (
@@ -172,7 +254,7 @@ const Reports = () => {
         <h1 className="h5">Loading reports</h1>
 
         <p className="text-muted mb-0">
-          Please wait while JobProof loads your workspace reports.
+          Please wait while JobProof loads your saved reports.
         </p>
       </section>
     );
@@ -183,6 +265,8 @@ const Reports = () => {
       <section className="py-5">
         <div className="card shadow-sm border-0">
           <div className="card-body p-4 p-md-5 text-center">
+            <p className="eyebrow mb-2">Reports</p>
+
             <h1 className="h3 mb-3">Business Profile required</h1>
 
             <p className="text-muted mb-4">
@@ -203,23 +287,21 @@ const Reports = () => {
       <div className="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4">
         <div>
           <p className="eyebrow mb-2">
-            {isWorker ? "My reports" : "Company reports"}
+            {isWorker ? "My job reports" : "Company job reports"}
           </p>
 
-          <h1 className="section-title mb-2">
-            {isWorker ? "My job reports" : "Company job reports"}
-          </h1>
+          <h1 className="section-title mb-2">Reports</h1>
 
           <p className="section-subtitle mb-0">
-            {getRoleDescription(profile?.role)}
+            {isWorker
+              ? "View reports you created or reports where you were included as part of the job team."
+              : "Review all saved reports across your company workspace."}
           </p>
         </div>
 
-        <div className="d-flex gap-2 flex-wrap">
-          <Link to="/create-report" className="btn btn-primary">
-            Create Report
-          </Link>
-        </div>
+        <Link to="/create-report" className="btn btn-primary">
+          Create Report
+        </Link>
       </div>
 
       {message && (
@@ -231,7 +313,7 @@ const Reports = () => {
       <div className="card shadow-sm border-0 mb-4">
         <div className="card-body p-3 p-md-4">
           <div className="row g-3 align-items-center">
-            <div className="col-lg-7">
+            <div className="col-md-8">
               <label htmlFor="reportSearch" className="form-label">
                 Search reports
               </label>
@@ -242,23 +324,14 @@ const Reports = () => {
                 className="form-control"
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Search by report number, client, address, service or worker"
+                placeholder="Search by report number, client, address, service, creator or team..."
               />
             </div>
 
-            <div className="col-lg-5">
-              <div className="reports-summary-box">
-                <span className="reports-summary-label">
-                  {isWorker ? "My reports" : "Total reports"}
-                </span>
-
-                <strong>{reports.length}</strong>
-
-                <span className="reports-summary-divider"></span>
-
-                <span className="reports-summary-label">Your role</span>
-
-                <strong>{displayRole}</strong>
+            <div className="col-md-4">
+              <div className="reports-count-box">
+                <span>Total reports</span>
+                <strong>{filteredReports.length}</strong>
               </div>
             </div>
           </div>
@@ -269,114 +342,169 @@ const Reports = () => {
         <div className="card shadow-sm border-0">
           <div className="card-body p-4 p-md-5 text-center">
             <h2 className="h4 mb-3">
-              {reports.length === 0 ? "No reports yet" : "No matching reports"}
+              {searchTerm ? "No reports found" : "No reports yet"}
             </h2>
 
             <p className="text-muted mb-4">
-              {reports.length === 0
-                ? isWorker
-                  ? "Create your first job report to start building your work history."
-                  : "Create your first job report to start building your company history."
-                : "Try another search term or clear the search field."}
+              {searchTerm
+                ? "Try a different search term."
+                : "Start by creating your first job report."}
             </p>
 
-            {reports.length === 0 && (
+            {!searchTerm && (
               <Link to="/create-report" className="btn btn-primary">
-                Create First Report
+                Create Report
               </Link>
             )}
           </div>
         </div>
       ) : (
-        <div className="card shadow-sm border-0">
-          <div className="table-responsive">
-            <table className="table align-middle mb-0 reports-table">
-              <thead>
-                <tr>
-                  <th>Report</th>
-                  <th>Client</th>
-                  <th>Job date</th>
-                  <th>Service</th>
-                  <th>Worker</th>
-                  <th>Status</th>
-                  <th className="text-end">Actions</th>
-                </tr>
-              </thead>
+        <>
+          <div className="reports-mobile-list">
+            {filteredReports.map((report) => (
+              <div className="reports-mobile-card" key={report.id}>
+                <div className="d-flex justify-content-between gap-3 mb-2">
+                  <div>
+                    <p className="eyebrow mb-1">{report.reportNumber}</p>
+                    <h2 className="h5 mb-1">{report.clientName}</h2>
+                    <p className="text-muted small mb-0">
+                      {formatDate(report.jobDate)}
+                    </p>
+                  </div>
 
-              <tbody>
-                {filteredReports.map((report) => (
-                  <tr key={report.id}>
-                    <td>
-                      <div className="fw-bold">
-                        {report.report_number || "No report number"}
-                      </div>
+                  <span className="badge bg-success text-capitalize align-self-start">
+                    {report.status}
+                  </span>
+                </div>
 
-                      <div className="text-muted small">
-                        Created {formatCreatedAt(report.created_at)}
-                      </div>
-                    </td>
+                <div className="reports-mobile-meta">
+                  <span>Service</span>
+                  <strong>{report.serviceType}</strong>
 
-                    <td>
-                      <div className="fw-semibold">
-                        {report.client_name || "Not specified"}
-                      </div>
+                  <span>Team</span>
+                  <strong>{report.teamSummary}</strong>
 
-                      <div className="text-muted small">
-                        {report.job_address || "No address added"}
-                      </div>
-                    </td>
+                  <span>Hours</span>
+                  <strong>{report.totalHours}</strong>
+                </div>
 
-                    <td>{formatDate(report.job_date)}</td>
+                <div className="d-flex gap-2 flex-wrap mt-3">
+                  <Link
+                    to={`/reports/${report.id}`}
+                    className="btn btn-sm btn-primary"
+                  >
+                    View
+                  </Link>
 
-                    <td>
-                      <div>{report.service_type || "Not specified"}</div>
+                  <Link
+                    to={`/edit-report/${report.id}`}
+                    className="btn btn-sm btn-outline-primary"
+                  >
+                    Edit
+                  </Link>
 
-                      <div className="text-muted small">
-                        {report.total_hours || "No hours recorded"}
-                      </div>
-                    </td>
-
-                    <td>
-                      <div>{report.profiles?.full_name || "Unknown user"}</div>
-
-                      <div className="text-muted small">
-                        {report.profiles?.role || "worker"}
-                      </div>
-                    </td>
-
-                    <td>
-                      <span
-                        className={`badge ${getStatusBadgeClass(
-                          report.status
-                        )}`}
-                      >
-                        {report.status || "completed"}
-                      </span>
-                    </td>
-
-                    <td className="text-end">
-                      <div className="btn-group btn-group-sm">
-                        <Link
-                          to={`/reports/${report.id}`}
-                          className="btn btn-outline-primary"
-                        >
-                          View
-                        </Link>
-
-                        <Link
-                          to={`/edit-report/${report.id}`}
-                          className="btn btn-outline-secondary"
-                        >
-                          Edit
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                  {!isWorker && (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-danger"
+                      onClick={() => handleDeleteReport(report.id)}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
+
+          <div className="card shadow-sm border-0 reports-table-card">
+            <div className="table-responsive">
+              <table className="table align-middle mb-0 reports-table">
+                <thead>
+                  <tr>
+                    <th>Report</th>
+                    <th>Client</th>
+                    <th>Job date</th>
+                    <th>Service</th>
+                    <th>Created by</th>
+                    <th>Team involved</th>
+                    <th>Hours</th>
+                    <th>Status</th>
+                    <th>Saved</th>
+                    <th className="text-end">Actions</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {filteredReports.map((report) => (
+                    <tr key={report.id}>
+                      <td>
+                        <strong>{report.reportNumber}</strong>
+                      </td>
+
+                      <td>
+                        <strong>{report.clientName}</strong>
+                        <div className="text-muted small">
+                          {report.jobAddress}
+                        </div>
+                      </td>
+
+                      <td>{formatDate(report.jobDate)}</td>
+
+                      <td>{report.serviceType}</td>
+
+                      <td>{report.creatorName}</td>
+
+                      <td>
+                        <span className="reports-team-pill">
+                          {report.teamSummary}
+                        </span>
+                      </td>
+
+                      <td>{report.totalHours}</td>
+
+                      <td>
+                        <span className="badge bg-success text-capitalize">
+                          {report.status}
+                        </span>
+                      </td>
+
+                      <td>{formatCreatedAt(report.createdAt)}</td>
+
+                      <td className="text-end">
+                        <div className="btn-group btn-group-sm">
+                          <Link
+                            to={`/reports/${report.id}`}
+                            className="btn btn-outline-primary"
+                          >
+                            View
+                          </Link>
+
+                          <Link
+                            to={`/edit-report/${report.id}`}
+                            className="btn btn-outline-secondary"
+                          >
+                            Edit
+                          </Link>
+
+                          {!isWorker && (
+                            <button
+                              type="button"
+                              className="btn btn-outline-danger"
+                              onClick={() => handleDeleteReport(report.id)}
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
     </section>
   );

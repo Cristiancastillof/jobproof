@@ -1,537 +1,472 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { calculateTotalHours } from "./calculateTotalHours";
 
-const PAGE_MARGIN = 14;
 const PAGE_WIDTH = 210;
 const PAGE_HEIGHT = 297;
-const HEADER_HEIGHT = 24;
-const FOOTER_HEIGHT = 16;
-const TOP_CONTENT_Y = 34;
-const BOTTOM_LIMIT = PAGE_HEIGHT - FOOTER_HEIGHT - 8;
-const CONTENT_WIDTH = PAGE_WIDTH - PAGE_MARGIN * 2;
+const MARGIN = 14;
 
-const JP_NAVY = [15, 23, 42];
-const JP_BLUE = [30, 64, 175];
-const JP_AMBER = [245, 158, 11];
-const JP_SLATE = [100, 116, 139];
-const JP_LIGHT = [248, 250, 252];
-const JP_BORDER = [203, 213, 225];
+const BRAND = {
+  navy: [15, 23, 42],
+  blue: [30, 64, 175],
+  amber: [245, 158, 11],
+  lightBg: [248, 250, 252],
+  border: [226, 232, 240],
+  muted: [100, 116, 139],
+  white: [255, 255, 255],
+};
 
-const formatDate = (dateString) => {
-  if (!dateString) return "Not provided";
+const formatDate = (dateValue) => {
+  if (!dateValue) return "Not provided";
 
-  const date = new Date(dateString);
+  const date = new Date(`${dateValue}T00:00:00`);
 
-  if (Number.isNaN(date.getTime())) return dateString;
+  if (Number.isNaN(date.getTime())) {
+    return dateValue;
+  }
 
   return date.toLocaleDateString("en-AU", {
     day: "2-digit",
-    month: "long",
+    month: "short",
     year: "numeric",
   });
 };
 
-const formatTime = (timeString) => {
-  if (!timeString) return "Not provided";
-
-  const [hours, minutes] = timeString.split(":");
-
-  if (!hours || !minutes) return timeString;
-
-  return `${hours}:${minutes}`;
+const formatValue = (value, fallback = "Not provided") => {
+  if (value === null || value === undefined || value === "") return fallback;
+  return String(value);
 };
 
-const cleanFileName = (value) => {
-  const cleaned = value
-    ?.trim()
-    .replace(/[^\w\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .toLowerCase();
+const getRoleLabel = (roleOnJob, role) => {
+  if (roleOnJob === "lead") return "Lead";
+  if (roleOnJob === "supervisor") return "Supervisor";
+  if (roleOnJob === "helper") return "Helper";
 
-  return cleaned || "file";
+  if (role === "admin") return "Admin";
+  if (role === "supervisor") return "Supervisor";
+
+  return "Worker";
 };
 
-const getImageFormat = (src) => {
-  if (src?.startsWith("data:image/png")) return "PNG";
-  return "JPEG";
+const getInitials = (name) => {
+  if (!name) return "U";
+
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
 };
 
 const loadImage = (src) => {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("Image could not be loaded"));
-
-    img.src = src;
-  });
-};
-
-const addImageSafely = async (pdf, imageSrc, x, y, maxWidth, maxHeight) => {
-  if (!imageSrc) return false;
-
-  try {
-    const img = await loadImage(imageSrc);
-
-    const ratio = Math.min(maxWidth / img.width, maxHeight / img.height);
-
-    const renderWidth = img.width * ratio;
-    const renderHeight = img.height * ratio;
-
-    pdf.addImage(
-      imageSrc,
-      getImageFormat(imageSrc),
-      x,
-      y,
-      renderWidth,
-      renderHeight
-    );
-
-    return true;
-  } catch (error) {
-    console.error("Image could not be added:", error);
-    return false;
-  }
-};
-
-const addHeader = async (pdf, reportData) => {
-  pdf.setFillColor(...JP_NAVY);
-  pdf.rect(0, 0, PAGE_WIDTH, HEADER_HEIGHT, "F");
-
-  pdf.setFillColor(...JP_AMBER);
-  pdf.rect(0, HEADER_HEIGHT - 2, PAGE_WIDTH, 2, "F");
-
-  let textX = PAGE_MARGIN;
-
-  if (reportData.businessLogo) {
-    const logoAdded = await addImageSafely(
-      pdf,
-      reportData.businessLogo,
-      PAGE_MARGIN,
-      5,
-      14,
-      14
-    );
-
-    if (logoAdded) {
-      textX = PAGE_MARGIN + 18;
+  return new Promise((resolve) => {
+    if (!src) {
+      resolve(null);
+      return;
     }
-  }
 
-  pdf.setTextColor(255, 255, 255);
-  pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(15);
-  pdf.text(reportData.businessName || "JobProof", textX, 10.5);
+    const image = new Image();
+    image.crossOrigin = "anonymous";
 
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(8.5);
+    image.onload = () => {
+      resolve(image);
+    };
 
-  const contactDetails = [reportData.businessEmail, reportData.businessPhone]
-    .filter(Boolean)
-    .join(" | ");
+    image.onerror = () => {
+      resolve(null);
+    };
 
-  if (contactDetails) {
-    pdf.text(contactDetails, textX, 16.8);
-  }
-
-  pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(9);
-
-  const headerRightText = reportData.reportNumber
-    ? `JOB REPORT  |  ${reportData.reportNumber}`
-    : "JOB REPORT";
-
-  pdf.text(headerRightText, PAGE_WIDTH - PAGE_MARGIN, 10.8, {
-    align: "right",
-  });
-
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(8);
-  pdf.setTextColor(226, 232, 240);
-
-  pdf.text("Generated with JobProof", PAGE_WIDTH - PAGE_MARGIN, 16.8, {
-    align: "right",
+    image.src = src;
   });
 };
 
-const addFooter = (pdf, pageNumber) => {
-  pdf.setDrawColor(...JP_BORDER);
-  pdf.line(
-    PAGE_MARGIN,
-    PAGE_HEIGHT - 14,
-    PAGE_WIDTH - PAGE_MARGIN,
-    PAGE_HEIGHT - 14
+const getImageDimensions = (image, maxWidth, maxHeight) => {
+  const ratio = Math.min(maxWidth / image.width, maxHeight / image.height);
+
+  return {
+    width: image.width * ratio,
+    height: image.height * ratio,
+  };
+};
+
+const addFooter = (doc, pageNumber) => {
+  doc.setDrawColor(...BRAND.border);
+  doc.line(MARGIN, PAGE_HEIGHT - 14, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - 14);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(...BRAND.muted);
+  doc.text("Generated with JobProof", MARGIN, PAGE_HEIGHT - 8);
+
+  doc.text(
+    `Page ${pageNumber}`,
+    PAGE_WIDTH - MARGIN,
+    PAGE_HEIGHT - 8,
+    { align: "right" }
+  );
+};
+
+const addPageIfNeeded = (doc, currentY, requiredSpace = 30) => {
+  if (currentY + requiredSpace <= PAGE_HEIGHT - 22) {
+    return currentY;
+  }
+
+  doc.addPage();
+  addFooter(doc, doc.getNumberOfPages());
+
+  return 20;
+};
+
+const addSectionTitle = (doc, title, y) => {
+  const nextY = addPageIfNeeded(doc, y, 18);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor(...BRAND.navy);
+  doc.text(title, MARGIN, nextY);
+
+  doc.setDrawColor(...BRAND.amber);
+  doc.setLineWidth(0.8);
+  doc.line(MARGIN, nextY + 3, MARGIN + 26, nextY + 3);
+
+  return nextY + 10;
+};
+
+const addHeader = async (doc, reportData) => {
+  doc.setFillColor(...BRAND.navy);
+  doc.rect(0, 0, PAGE_WIDTH, 38, "F");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(...BRAND.amber);
+  doc.text("JOBPROOF", MARGIN, 13);
+
+  doc.setFontSize(18);
+  doc.setTextColor(...BRAND.white);
+  doc.text(formatValue(reportData.reportNumber, "Draft report"), MARGIN, 25);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.text(
+    formatValue(reportData.businessName, "Business name not set"),
+    MARGIN,
+    32
   );
 
-  pdf.setFillColor(...JP_AMBER);
-  pdf.rect(PAGE_MARGIN, PAGE_HEIGHT - 14.8, 18, 1.2, "F");
+  const logo = await loadImage(reportData.businessLogo);
 
-  pdf.setTextColor(...JP_SLATE);
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(9);
+  if (logo) {
+    const dimensions = getImageDimensions(logo, 24, 24);
+    doc.setFillColor(...BRAND.white);
+    doc.roundedRect(PAGE_WIDTH - MARGIN - 28, 7, 28, 28, 3, 3, "F");
 
-  pdf.text("JobProof - Professional job reports", PAGE_MARGIN, PAGE_HEIGHT - 8);
-
-  pdf.text(`Page ${pageNumber}`, PAGE_WIDTH - PAGE_MARGIN, PAGE_HEIGHT - 8, {
-    align: "right",
-  });
-};
-
-const setupPage = async (pdf, reportData, pageNumber) => {
-  await addHeader(pdf, reportData);
-  addFooter(pdf, pageNumber);
-};
-
-const addNewPage = async (pdf, reportData, pageNumberRef) => {
-  pdf.addPage();
-  pageNumberRef.value += 1;
-  await setupPage(pdf, reportData, pageNumberRef.value);
-
-  return TOP_CONTENT_Y;
-};
-
-const addSectionTitle = (pdf, title, y) => {
-  pdf.setTextColor(...JP_NAVY);
-  pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(13);
-  pdf.text(title, PAGE_MARGIN, y);
-
-  pdf.setDrawColor(...JP_BORDER);
-  pdf.line(PAGE_MARGIN, y + 3, PAGE_WIDTH - PAGE_MARGIN, y + 3);
-
-  pdf.setFillColor(...JP_AMBER);
-  pdf.rect(PAGE_MARGIN, y + 2.4, 14, 1.2, "F");
-
-  return y + 10;
-};
-
-const addTextSection = async (
-  pdf,
-  title,
-  content,
-  y,
-  reportData,
-  pageNumberRef
-) => {
-  const safeContent = content?.trim() || "Not provided";
-
-  if (y > BOTTOM_LIMIT - 25) {
-    y = await addNewPage(pdf, reportData, pageNumberRef);
-  }
-
-  y = addSectionTitle(pdf, title, y);
-
-  pdf.setTextColor(55, 65, 81);
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(10);
-
-  const lines = pdf.splitTextToSize(safeContent, CONTENT_WIDTH);
-  const lineHeight = 5;
-  const textHeight = lines.length * lineHeight;
-
-  if (y + textHeight > BOTTOM_LIMIT) {
-    y = await addNewPage(pdf, reportData, pageNumberRef);
-    y = addSectionTitle(pdf, title, y);
-  }
-
-  pdf.text(lines, PAGE_MARGIN, y);
-
-  return y + textHeight + 8;
-};
-
-const addPhotoCard = async (pdf, photo, x, y, width, height, caption) => {
-  pdf.setFillColor(...JP_LIGHT);
-  pdf.setDrawColor(...JP_BORDER);
-  pdf.roundedRect(x, y, width, height, 2, 2, "FD");
-
-  try {
-    const img = await loadImage(photo);
-
-    const imageAreaPadding = 3;
-    const maxImageWidth = width - imageAreaPadding * 2;
-    const maxImageHeight = height - 14;
-
-    const ratio = Math.min(
-      maxImageWidth / img.width,
-      maxImageHeight / img.height
+    doc.addImage(
+      logo,
+      "JPEG",
+      PAGE_WIDTH - MARGIN - 26 + (24 - dimensions.width) / 2,
+      9 + (24 - dimensions.height) / 2,
+      dimensions.width,
+      dimensions.height
     );
-
-    const renderWidth = img.width * ratio;
-    const renderHeight = img.height * ratio;
-
-    const renderX = x + (width - renderWidth) / 2;
-    const renderY = y + imageAreaPadding + (maxImageHeight - renderHeight) / 2;
-
-    pdf.addImage(
-      photo,
-      getImageFormat(photo),
-      renderX,
-      renderY,
-      renderWidth,
-      renderHeight
-    );
-  } catch (error) {
-    pdf.setTextColor(...JP_SLATE);
-    pdf.setFont("helvetica", "italic");
-    pdf.setFontSize(9);
-    pdf.text("Image unavailable", x + width / 2, y + height / 2, {
-      align: "center",
-    });
   }
 
-  pdf.setTextColor(...JP_NAVY);
-  pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(8.5);
-  pdf.text(caption, x + 3, y + height - 5);
+  return 50;
 };
 
-const addPhotoSection = async (
-  pdf,
-  title,
-  photos,
-  y,
-  reportData,
-  pageNumberRef
-) => {
-  if (y > BOTTOM_LIMIT - 35) {
-    y = await addNewPage(pdf, reportData, pageNumberRef);
-  }
+const addInfoTable = (doc, title, rows, y) => {
+  let currentY = addSectionTitle(doc, title, y);
 
-  y = addSectionTitle(pdf, title, y);
-
-  if (!photos || photos.length === 0) {
-    pdf.setTextColor(...JP_SLATE);
-    pdf.setFont("helvetica", "normal");
-    pdf.setFontSize(10);
-    pdf.text("No photos attached.", PAGE_MARGIN, y);
-
-    return y + 10;
-  }
-
-  const gap = 8;
-  const cardWidth = (CONTENT_WIDTH - gap) / 2;
-  const cardHeight = 72;
-  const rowHeight = cardHeight + 8;
-
-  for (let index = 0; index < photos.length; index += 2) {
-    if (y + rowHeight > BOTTOM_LIMIT) {
-      y = await addNewPage(pdf, reportData, pageNumberRef);
-      y = addSectionTitle(pdf, `${title} continued`, y);
-    }
-
-    const firstPhoto = photos[index];
-    const secondPhoto = photos[index + 1];
-
-    await addPhotoCard(
-      pdf,
-      firstPhoto,
-      PAGE_MARGIN,
-      y,
-      cardWidth,
-      cardHeight,
-      `${title} - Photo ${index + 1}`
-    );
-
-    if (secondPhoto) {
-      await addPhotoCard(
-        pdf,
-        secondPhoto,
-        PAGE_MARGIN + cardWidth + gap,
-        y,
-        cardWidth,
-        cardHeight,
-        `${title} - Photo ${index + 2}`
-      );
-    }
-
-    y += rowHeight;
-  }
-
-  return y + 4;
-};
-
-export const generatePDF = async (reportData) => {
-  const calculatedTotalHours =
-    reportData.totalHours ||
-    calculateTotalHours(reportData.startingHour, reportData.finishHour);
-
-  const currentReportData = {
-    reportNumber: reportData.reportNumber || "Draft",
-    businessName: reportData.businessName || "",
-    businessEmail: reportData.businessEmail || "",
-    businessPhone: reportData.businessPhone || "",
-    businessLogo: reportData.businessLogo || "",
-    workerName: reportData.workerName || "",
-    clientName: reportData.clientName || "",
-    jobAddress: reportData.jobAddress || "",
-    jobDate: reportData.jobDate || "",
-    startingHour: reportData.startingHour || "",
-    finishHour: reportData.finishHour || "",
-    totalHours: calculatedTotalHours || "",
-    serviceType: reportData.serviceType || "",
-    workCompleted: reportData.workCompleted || "",
-    issuesFound: reportData.issuesFound || "",
-    recommendations: reportData.recommendations || "",
-    beforePhotos: reportData.beforePhotos || [],
-    afterPhotos: reportData.afterPhotos || [],
-  };
-
-  const pdf = new jsPDF("p", "mm", "a4");
-
-  const pageNumberRef = {
-    value: 1,
-  };
-
-  await setupPage(pdf, currentReportData, pageNumberRef.value);
-
-  let y = TOP_CONTENT_Y;
-
-  autoTable(pdf, {
-    startY: y,
-    margin: {
-      left: PAGE_MARGIN,
-      right: PAGE_MARGIN,
-    },
+  autoTable(doc, {
+    startY: currentY,
     theme: "grid",
+    head: [["Field", "Details"]],
+    body: rows,
+    margin: { left: MARGIN, right: MARGIN },
     styles: {
       font: "helvetica",
       fontSize: 9,
       cellPadding: 3,
-      textColor: JP_NAVY,
-      lineColor: JP_BORDER,
+      lineColor: BRAND.border,
       lineWidth: 0.2,
+      textColor: BRAND.navy,
+      valign: "middle",
     },
     headStyles: {
-      fillColor: JP_BLUE,
-      textColor: [255, 255, 255],
+      fillColor: BRAND.blue,
+      textColor: BRAND.white,
       fontStyle: "bold",
-    },
-    alternateRowStyles: {
-      fillColor: JP_LIGHT,
     },
     columnStyles: {
       0: {
-        cellWidth: 36,
+        cellWidth: 45,
+        fontStyle: "bold",
+        fillColor: BRAND.lightBg,
+      },
+      1: {
+        cellWidth: "auto",
+      },
+    },
+  });
+
+  return doc.lastAutoTable.finalY + 10;
+};
+
+const addTeamInvolved = (doc, reportData, y) => {
+  const teamInvolved = reportData.teamInvolved || [];
+
+  let currentY = addSectionTitle(doc, "Team involved", y);
+
+  if (teamInvolved.length === 0) {
+    autoTable(doc, {
+      startY: currentY,
+      theme: "grid",
+      body: [["No team members recorded for this job."]],
+      margin: { left: MARGIN, right: MARGIN },
+      styles: {
+        font: "helvetica",
+        fontSize: 9,
+        cellPadding: 4,
+        lineColor: BRAND.border,
+        textColor: BRAND.muted,
+      },
+    });
+
+    return doc.lastAutoTable.finalY + 10;
+  }
+
+  const rows = teamInvolved.map((member, index) => [
+    String(index + 1).padStart(2, "0"),
+    formatValue(member.fullName, "Unknown user"),
+    formatValue(member.email, "Not provided"),
+    getRoleLabel(member.roleOnJob, member.role),
+  ]);
+
+  autoTable(doc, {
+    startY: currentY,
+    theme: "grid",
+    head: [["#", "Name", "Email", "Job role"]],
+    body: rows,
+    margin: { left: MARGIN, right: MARGIN },
+    styles: {
+      font: "helvetica",
+      fontSize: 9,
+      cellPadding: 3,
+      lineColor: BRAND.border,
+      lineWidth: 0.2,
+      textColor: BRAND.navy,
+      valign: "middle",
+    },
+    headStyles: {
+      fillColor: BRAND.blue,
+      textColor: BRAND.white,
+      fontStyle: "bold",
+    },
+    columnStyles: {
+      0: {
+        cellWidth: 13,
+        halign: "center",
         fontStyle: "bold",
       },
       1: {
-        cellWidth: 56,
-      },
-      2: {
-        cellWidth: 36,
+        cellWidth: 48,
         fontStyle: "bold",
       },
+      2: {
+        cellWidth: 70,
+      },
       3: {
-        cellWidth: 56,
+        cellWidth: 35,
+        halign: "center",
       },
     },
-    head: [["Client & Job Information", "", "Report Details", ""]],
-    body: [
-      [
-        "Report No.",
-        currentReportData.reportNumber || "Draft",
-        "Generated",
-        formatDate(new Date().toISOString()),
-      ],
-      [
-        "Business",
-        currentReportData.businessName || "Not provided",
-        "Client",
-        currentReportData.clientName || "Not provided",
-      ],
-      [
-        "Business Email",
-        currentReportData.businessEmail || "Not provided",
-        "Business Phone",
-        currentReportData.businessPhone || "Not provided",
-      ],
-      [
-        "Address",
-        currentReportData.jobAddress || "Not provided",
-        "Job Date",
-        formatDate(currentReportData.jobDate),
-      ],
-      [
-        "Service Type",
-        currentReportData.serviceType || "Not provided",
-        "Completed By",
-        currentReportData.workerName || "Not provided",
-      ],
-      [
-        "Start Time",
-        formatTime(currentReportData.startingHour),
-        "Finish Time",
-        formatTime(currentReportData.finishHour),
-      ],
-      [
-        "Total Hours",
-        currentReportData.totalHours || "Not provided",
-        "",
-        "",
-      ],
-    ],
+    didParseCell: (data) => {
+      if (data.section === "body" && data.column.index === 3) {
+        data.cell.styles.fontStyle = "bold";
+        data.cell.styles.textColor = BRAND.blue;
+      }
+    },
   });
 
-  y = pdf.lastAutoTable.finalY + 10;
-
-  y = await addTextSection(
-    pdf,
-    "Work Completed",
-    currentReportData.workCompleted,
-    y,
-    currentReportData,
-    pageNumberRef
-  );
-
-  y = await addTextSection(
-    pdf,
-    "Issues Found",
-    currentReportData.issuesFound,
-    y,
-    currentReportData,
-    pageNumberRef
-  );
-
-  y = await addTextSection(
-    pdf,
-    "Recommendations",
-    currentReportData.recommendations,
-    y,
-    currentReportData,
-    pageNumberRef
-  );
-
-  y = await addPhotoSection(
-    pdf,
-    "Before Photos",
-    currentReportData.beforePhotos,
-    y,
-    currentReportData,
-    pageNumberRef
-  );
-
-  await addPhotoSection(
-    pdf,
-    "After Photos",
-    currentReportData.afterPhotos,
-    y,
-    currentReportData,
-    pageNumberRef
-  );
-
-  const reportNumber =
-    currentReportData.reportNumber && currentReportData.reportNumber !== "Draft"
-      ? cleanFileName(currentReportData.reportNumber)
-      : "draft-report";
-
-  const clientName = currentReportData.clientName
-    ? cleanFileName(currentReportData.clientName)
-    : "client";
-
-  const uniqueId = new Date().toISOString().replace(/[:.]/g, "-");
-
-  const fileName = `${reportNumber}-${clientName}-${uniqueId}-jobproof-report.pdf`;
-
-  pdf.save(fileName);
+  return doc.lastAutoTable.finalY + 10;
 };
+
+const addNotes = (doc, reportData, y) => {
+  let currentY = addSectionTitle(doc, "Work notes", y);
+
+  const rows = [
+    ["Work completed", formatValue(reportData.workCompleted)],
+    ["Issues found", formatValue(reportData.issuesFound)],
+    ["Recommendations", formatValue(reportData.recommendations)],
+  ];
+
+  autoTable(doc, {
+    startY: currentY,
+    theme: "grid",
+    body: rows,
+    margin: { left: MARGIN, right: MARGIN },
+    styles: {
+      font: "helvetica",
+      fontSize: 9,
+      cellPadding: 4,
+      lineColor: BRAND.border,
+      lineWidth: 0.2,
+      textColor: BRAND.navy,
+      valign: "top",
+    },
+    columnStyles: {
+      0: {
+        cellWidth: 45,
+        fontStyle: "bold",
+        fillColor: BRAND.lightBg,
+      },
+      1: {
+        cellWidth: "auto",
+      },
+    },
+  });
+
+  return doc.lastAutoTable.finalY + 10;
+};
+
+const addPhotosSection = async (doc, title, photos, y) => {
+  let currentY = addSectionTitle(doc, title, y);
+
+  if (!photos || photos.length === 0) {
+    autoTable(doc, {
+      startY: currentY,
+      theme: "grid",
+      body: [[`No ${title.toLowerCase()} uploaded.`]],
+      margin: { left: MARGIN, right: MARGIN },
+      styles: {
+        font: "helvetica",
+        fontSize: 9,
+        cellPadding: 4,
+        lineColor: BRAND.border,
+        textColor: BRAND.muted,
+      },
+    });
+
+    return doc.lastAutoTable.finalY + 10;
+  }
+
+  const imageWidth = 82;
+  const imageHeight = 62;
+  const gap = 10;
+  const leftX = MARGIN;
+  const rightX = MARGIN + imageWidth + gap;
+
+  for (let index = 0; index < photos.length; index += 1) {
+    const isLeft = index % 2 === 0;
+    const x = isLeft ? leftX : rightX;
+
+    if (isLeft) {
+      currentY = addPageIfNeeded(doc, currentY, imageHeight + 16);
+    }
+
+    const image = await loadImage(photos[index]);
+
+    doc.setDrawColor(...BRAND.border);
+    doc.setFillColor(...BRAND.lightBg);
+    doc.roundedRect(x, currentY, imageWidth, imageHeight, 3, 3, "FD");
+
+    if (image) {
+      const dimensions = getImageDimensions(image, imageWidth - 6, imageHeight - 12);
+
+      doc.addImage(
+        image,
+        "JPEG",
+        x + (imageWidth - dimensions.width) / 2,
+        currentY + 5,
+        dimensions.width,
+        dimensions.height
+      );
+    } else {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(...BRAND.muted);
+      doc.text("Image unavailable", x + imageWidth / 2, currentY + 32, {
+        align: "center",
+      });
+    }
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(...BRAND.navy);
+    doc.text(`${title.replace(" photos", "")} photo ${index + 1}`, x + 4, currentY + imageHeight - 4);
+
+    if (!isLeft || index === photos.length - 1) {
+      currentY += imageHeight + 10;
+    }
+  }
+
+  return currentY + 4;
+};
+
+export const generatePDF = async (reportData) => {
+  const doc = new jsPDF("p", "mm", "a4");
+
+  let currentY = await addHeader(doc, reportData);
+
+  addFooter(doc, 1);
+
+  currentY = addInfoTable(
+    doc,
+    "Business details",
+    [
+      ["Business", formatValue(reportData.businessName)],
+      ["Email", formatValue(reportData.businessEmail)],
+      ["Phone", formatValue(reportData.businessPhone)],
+      ["Created by", formatValue(reportData.workerName)],
+    ],
+    currentY
+  );
+
+  currentY = addInfoTable(
+    doc,
+    "Client and job details",
+    [
+      ["Client", formatValue(reportData.clientName)],
+      ["Job address", formatValue(reportData.jobAddress)],
+      ["Job date", formatDate(reportData.jobDate)],
+      ["Starting hour", formatValue(reportData.startingHour)],
+      ["Finish hour", formatValue(reportData.finishHour)],
+      ["Total hours", formatValue(reportData.totalHours, "Not calculated")],
+      ["Service type", formatValue(reportData.serviceType)],
+    ],
+    currentY
+  );
+
+  currentY = addTeamInvolved(doc, reportData, currentY);
+
+  currentY = addNotes(doc, reportData, currentY);
+
+  currentY = await addPhotosSection(
+    doc,
+    "Before photos",
+    reportData.beforePhotos || [],
+    currentY
+  );
+
+  currentY = await addPhotosSection(
+    doc,
+    "After photos",
+    reportData.afterPhotos || [],
+    currentY
+  );
+
+  const totalPages = doc.getNumberOfPages();
+
+  for (let page = 1; page <= totalPages; page += 1) {
+    doc.setPage(page);
+    addFooter(doc, page);
+  }
+
+  const fileName = `${formatValue(
+    reportData.reportNumber,
+    "jobproof-report"
+  )}.pdf`;
+
+  doc.save(fileName);
+};
+
+export default generatePDF;

@@ -53,14 +53,22 @@ const Navbar = () => {
 
         <div className="collapse navbar-collapse" id="jobproofNavbar">
           <ul className="navbar-nav ms-auto align-items-lg-center gap-lg-2">
-            <li className="nav-item">
-              <NavLink to="/" className={getNavLinkClass}>
-                Home
-              </NavLink>
-            </li>
-
             {isAuthenticated ? (
               <>
+                <li className="nav-item">
+                  <NavLink to="/" className={getNavLinkClass}>
+                    Dashboard
+                  </NavLink>
+                </li>
+
+                {isAdmin && (
+                  <li className="nav-item">
+                    <NavLink to="/team" className={getNavLinkClass}>
+                      Team
+                    </NavLink>
+                  </li>
+                )}
+
                 <li className="nav-item">
                   <NavLink to="/reports" className={getNavLinkClass}>
                     Reports
@@ -74,22 +82,14 @@ const Navbar = () => {
                 </li>
 
                 {isAdmin && (
-                  <>
-                    <li className="nav-item">
-                      <NavLink to="/team" className={getNavLinkClass}>
-                        Team
-                      </NavLink>
-                    </li>
-
-                    <li className="nav-item">
-                      <NavLink
-                        to="/business-profile"
-                        className={getNavLinkClass}
-                      >
-                        Business Profile
-                      </NavLink>
-                    </li>
-                  </>
+                  <li className="nav-item">
+                    <NavLink
+                      to="/business-profile"
+                      className={getNavLinkClass}
+                    >
+                      Business Profile
+                    </NavLink>
+                  </li>
                 )}
 
                 <li className="nav-item">
@@ -111,6 +111,12 @@ const Navbar = () => {
               </>
             ) : (
               <>
+                <li className="nav-item">
+                  <NavLink to="/" className={getNavLinkClass}>
+                    Home
+                  </NavLink>
+                </li>
+
                 <li className="nav-item">
                   <NavLink to="/login" className={getNavLinkClass}>
                     Log in

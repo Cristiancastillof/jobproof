@@ -5,6 +5,9 @@ const ReportForm = ({
   setReportData,
   photoFiles,
   setPhotoFiles,
+  teamMembers = [],
+  selectedWorkerIds = [],
+  setSelectedWorkerIds,
 }) => {
   const totalHours =
     reportData.totalHours ||
@@ -26,6 +29,18 @@ const ReportForm = ({
     }
 
     setReportData(updatedReportData);
+  };
+
+  const handleWorkerToggle = (workerId) => {
+    if (!setSelectedWorkerIds) return;
+
+    setSelectedWorkerIds((currentWorkerIds) => {
+      if (currentWorkerIds.includes(workerId)) {
+        return currentWorkerIds.filter((id) => id !== workerId);
+      }
+
+      return [...currentWorkerIds, workerId];
+    });
   };
 
   const readFileAsDataUrl = (file) => {
@@ -59,7 +74,10 @@ const ReportForm = ({
     if (setPhotoFiles) {
       setPhotoFiles((currentPhotoFiles) => ({
         ...currentPhotoFiles,
-        [photoType]: [...(currentPhotoFiles[photoType] || []), ...uploadedPhotos],
+        [photoType]: [
+          ...(currentPhotoFiles[photoType] || []),
+          ...uploadedPhotos,
+        ],
       }));
     }
 
@@ -86,6 +104,77 @@ const ReportForm = ({
         ),
       }));
     }
+  };
+
+  const renderTeamSelector = () => {
+    if (!teamMembers || teamMembers.length === 0) {
+      return (
+        <div className="mb-4">
+          <h3 className="h5 mb-3">Team involved</h3>
+
+          <div className="team-involved-empty">
+            <p className="text-muted mb-0">
+              No active team members were found. The report creator will still
+              be recorded automatically.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="mb-4">
+        <div className="d-flex justify-content-between align-items-start gap-3 mb-3">
+          <div>
+            <h3 className="h5 mb-1">Team involved</h3>
+
+            <p className="text-muted small mb-0">
+              Select every person who participated in this job. The report
+              creator is selected automatically.
+            </p>
+          </div>
+
+          <span className="team-involved-count">
+            {selectedWorkerIds.length} selected
+          </span>
+        </div>
+
+        <div className="team-involved-grid">
+          {teamMembers.map((member) => {
+            const isSelected = selectedWorkerIds.includes(member.id);
+            const isLead = reportData.createdBy === member.id;
+
+            return (
+              <button
+                key={member.id}
+                type="button"
+                className={
+                  isSelected
+                    ? "team-involved-option selected"
+                    : "team-involved-option"
+                }
+                onClick={() => handleWorkerToggle(member.id)}
+              >
+                <span className="team-involved-avatar">
+                  {member.full_name?.charAt(0)?.toUpperCase() || "U"}
+                </span>
+
+                <span className="team-involved-text">
+                  <strong>{member.full_name || "Unnamed user"}</strong>
+                  <small>
+                    {isLead ? "Lead / Report creator" : member.role || "worker"}
+                  </small>
+                </span>
+
+                <span className="team-involved-check">
+                  {isSelected ? "✓" : ""}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
   };
 
   const renderPhotoUploader = (title, photoType, inputId) => {
@@ -180,7 +269,7 @@ const ReportForm = ({
           {reportData.workerName ? (
             <>
               {" "}
-              and will be marked as completed by{" "}
+              and will be marked as created by{" "}
               <strong>{reportData.workerName}</strong>.
             </>
           ) : (
@@ -295,6 +384,8 @@ const ReportForm = ({
             />
           </div>
         </div>
+
+        {renderTeamSelector()}
 
         <div className="mb-4">
           <h3 className="h5 mb-3">Work notes</h3>
