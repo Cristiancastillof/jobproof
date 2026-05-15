@@ -1,12 +1,24 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import ReportForm from "../components/ReportForm";
 import ReportPreview from "../components/ReportPreview";
-import { generatePDF } from "../utils/generatePDF";
+import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabaseClient";
 import { calculateTotalHours } from "../utils/calculateTotalHours";
-import { generateReportNumber } from "../utils/generateReportNumber";
+import { generatePDF } from "../utils/generatePDF";
 
-const initialReportData = {
+const LOCAL_REPORTS_KEY = "jobproofReports";
+
+const getTodayDate = () => {
+  return new Date().toISOString().split("T")[0];
+};
+
+const getYear = () => {
+  return new Date().getFullYear();
+};
+
+const createEmptyReport = () => ({
+  id: "",
   reportNumber: "",
   businessName: "",
   businessEmail: "",
@@ -15,7 +27,7 @@ const initialReportData = {
   workerName: "",
   clientName: "",
   jobAddress: "",
-  jobDate: "",
+  jobDate: getTodayDate(),
   startingHour: "",
   finishHour: "",
   totalHours: "",
@@ -25,310 +37,446 @@ const initialReportData = {
   recommendations: "",
   beforePhotos: [],
   afterPhotos: [],
-};
+  createdAt: "",
+  updatedAt: "",
+});
 
-const getSavedBusinessProfile = () => {
-  const savedBusinessProfile = localStorage.getItem("jobproofBusinessProfile");
+const mapSupabaseReportToForm = (report, company, workerName) => ({
+  id: report.id || "",
+  reportNumber: report.report_number || "",
+  businessName: company?.business_name || "",
+  businessEmail: company?.business_email || "",
+  businessPhone: company?.business_phone || "",
+  businessLogo: company?.business_logo_url || "",
+  workerName: workerName || "",
+  clientName: report.client_name || "",
+  jobAddress: report.job_address || "",
+  jobDate: report.job_date || getTodayDate(),
+  startingHour: report.starting_hour ? report.starting_hour.slice(0, 5) : "",
+  finishHour: report.finish_hour ? report.finish_hour.slice(0, 5) : "",
+  totalHours: report.total_hours || "",
+  serviceType: report.service_type || "",
+  workCompleted: report.work_completed || "",
+  issuesFound: report.issues_found || "",
+  recommendations: report.recommendations || "",
+  beforePhotos: [],
+  afterPhotos: [],
+  createdAt: report.created_at || "",
+  updatedAt: report.updated_at || "",
+});
 
-  if (!savedBusinessProfile) return null;
+const buildSupabasePayload = ({ reportData, profile, user }) => ({
+  company_id: profile.company_id,
+  created_by: user.id,
+  report_number: reportData.reportNumber,
+  client_name: reportData.clientName,
+  job_address: reportData.jobAddress,
+  job_date: reportData.jobDate || null,
+  starting_hour: reportData.startingHour || null,
+  finish_hour: reportData.finishHour || null,
+  total_hours:
+    reportData.totalHours ||
+    calculateTotalHours(reportData.startingHour, reportData.finishHour),
+  service_type: reportData.serviceType,
+  work_completed: reportData.workCompleted,
+  issues_found: reportData.issuesFound,
+  recommendations: reportData.recommendations,
+  status: "completed",
+  updated_at: new Date().toISOString(),
+});
 
+const getLocalReports = () => {
   try {
-    return JSON.parse(savedBusinessProfile);
+    return JSON.parse(localStorage.getItem(LOCAL_REPORTS_KEY)) || [];
   } catch (error) {
-    console.error("Invalid business profile data:", error);
-    return null;
+    console.error("Error reading local reports:", error);
+    return [];
   }
 };
 
-const getReportDataWithBusinessProfile = () => {
-  const savedBusinessProfile = getSavedBusinessProfile();
+const saveLocalReportCopy = (reportToSave) => {
+  const currentReports = getLocalReports();
+  const existingIndex = currentReports.findIndex(
+    (report) => report.id === reportToSave.id
+  );
 
-  if (!savedBusinessProfile) return initialReportData;
+  let updatedReports;
 
-  return {
-    ...initialReportData,
-    businessName: savedBusinessProfile.businessName || "",
-    businessEmail: savedBusinessProfile.businessEmail || "",
-    businessPhone: savedBusinessProfile.businessPhone || "",
-    businessLogo: savedBusinessProfile.businessLogo || "",
-    workerName: savedBusinessProfile.defaultWorkerName || "",
-  };
+  if (existingIndex >= 0) {
+    updatedReports = currentReports.map((report) =>
+      report.id === reportToSave.id ? reportToSave : report
+    );
+  } else {
+    updatedReports = [reportToSave, ...currentReports];
+  }
+
+  localStorage.setItem(LOCAL_REPORTS_KEY, JSON.stringify(updatedReports));
+};
+
+const generateReportNumber = async (companyId) => {
+  const year = getYear();
+  const prefix = `JP-${year}`;
+
+  const { count, error } = await supabase
+    .from("reports")
+    .select("id", { count: "exact", head: true })
+    .eq("company_id", companyId)
+    .ilike("report_number", `${prefix}-%`);
+
+  if (error) {
+    console.error("Error generating report number:", error);
+    return `${prefix}-${String(Date.now()).slice(-4)}`;
+  }
+
+  return `${prefix}-${String((count || 0) + 1).padStart(4, "0")}`;
 };
 
 const CreateReport = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user, profile, displayName, profileLoading } = useAuth();
 
   const isEditMode = Boolean(id);
 
-  const [reportData, setReportData] = useState(initialReportData);
-  const [message, setMessage] = useState({
-    type: "",
-    text: "",
-  });
+  const [reportData, setReportData] = useState(createEmptyReport);
+  const [company, setCompany] = useState(null);
+  const [loadingReport, setLoadingReport] = useState(true);
+  const [savingReport, setSavingReport] = useState(false);
+  const [message, setMessage] = useState(null);
+
+  const canCreateReport = useMemo(() => {
+    return Boolean(user?.id && profile?.company_id);
+  }, [user, profile]);
 
   useEffect(() => {
-    if (isEditMode) return;
+    const loadCompanyAndReport = async () => {
+      if (profileLoading) return;
 
-    const dataWithBusinessProfile = getReportDataWithBusinessProfile();
+      if (!user?.id) {
+        setLoadingReport(false);
+        return;
+      }
 
-    setReportData(dataWithBusinessProfile);
-  }, [isEditMode]);
+      if (!profile?.company_id) {
+        setLoadingReport(false);
+        setMessage({
+          type: "warning",
+          text: "Please complete your Business Profile before creating reports.",
+        });
+        return;
+      }
 
-  useEffect(() => {
-    if (!isEditMode) return;
+      setLoadingReport(true);
+      setMessage(null);
 
-    const savedReports =
-      JSON.parse(localStorage.getItem("jobproofReports")) || [];
+      try {
+        const { data: companyData, error: companyError } = await supabase
+          .from("companies")
+          .select(
+            "id, business_name, business_email, business_phone, business_logo_url"
+          )
+          .eq("id", profile.company_id)
+          .single();
 
-    const reportToEdit = savedReports.find((report) => report.id === id);
+        if (companyError) {
+          throw companyError;
+        }
 
-    if (!reportToEdit) {
+        setCompany(companyData);
+
+        if (isEditMode) {
+          const { data: existingReport, error: reportError } = await supabase
+            .from("reports")
+            .select("*")
+            .eq("id", id)
+            .single();
+
+          if (reportError) {
+            throw reportError;
+          }
+
+          const localReport = getLocalReports().find(
+            (report) => report.id === id
+          );
+
+          setReportData({
+            ...mapSupabaseReportToForm(existingReport, companyData, displayName),
+            beforePhotos: localReport?.beforePhotos || [],
+            afterPhotos: localReport?.afterPhotos || [],
+          });
+        } else {
+          const reportNumber = await generateReportNumber(profile.company_id);
+
+          setReportData({
+            ...createEmptyReport(),
+            reportNumber,
+            businessName: companyData.business_name || "",
+            businessEmail: companyData.business_email || "",
+            businessPhone: companyData.business_phone || "",
+            businessLogo: companyData.business_logo_url || "",
+            workerName: displayName || "",
+            jobDate: getTodayDate(),
+          });
+        }
+      } catch (error) {
+        console.error("Error loading report data:", error);
+        setMessage({
+          type: "danger",
+          text: error.message || "There was an error loading this report.",
+        });
+      } finally {
+        setLoadingReport(false);
+      }
+    };
+
+    loadCompanyAndReport();
+  }, [id, isEditMode, user, profile, profileLoading, displayName]);
+
+  const handleSaveReport = async () => {
+    if (!canCreateReport) {
       setMessage({
         type: "warning",
-        text: "Report not found. It may have been deleted.",
+        text: "Please complete your Business Profile before saving reports.",
       });
       return;
     }
 
-    setReportData({
-      ...initialReportData,
-      ...reportToEdit,
-      totalHours:
-        reportToEdit.totalHours ||
-        calculateTotalHours(reportToEdit.startingHour, reportToEdit.finishHour),
-      beforePhotos: reportToEdit.beforePhotos || [],
-      afterPhotos: reportToEdit.afterPhotos || [],
-    });
-  }, [id, isEditMode]);
-
-  const showMessage = (type, text) => {
-    setMessage({ type, text });
-
-    setTimeout(() => {
-      setMessage({ type: "", text: "" });
-    }, 3500);
-  };
-
-  const isReportValid = () => {
-    return (
-      reportData.businessName.trim() ||
-      reportData.businessEmail.trim() ||
-      reportData.businessPhone.trim() ||
-      reportData.workerName.trim() ||
-      reportData.clientName.trim() ||
-      reportData.jobAddress.trim() ||
-      reportData.jobDate.trim() ||
-      reportData.startingHour.trim() ||
-      reportData.finishHour.trim() ||
-      reportData.serviceType.trim() ||
-      reportData.workCompleted.trim() ||
-      reportData.issuesFound.trim() ||
-      reportData.recommendations.trim() ||
-      reportData.beforePhotos.length > 0 ||
-      reportData.afterPhotos.length > 0
-    );
-  };
-
-  const prepareReportForSave = () => {
-    return {
-      ...reportData,
-      totalHours: calculateTotalHours(
-        reportData.startingHour,
-        reportData.finishHour
-      ),
-      beforePhotos: reportData.beforePhotos || [],
-      afterPhotos: reportData.afterPhotos || [],
-    };
-  };
-
-  const handleDownloadPDF = async () => {
-    if (!isReportValid()) {
-      showMessage(
-        "warning",
-        "Please add at least one detail before downloading the PDF."
-      );
+    if (!reportData.clientName.trim()) {
+      setMessage({
+        type: "warning",
+        text: "Please enter the client name before saving.",
+      });
       return;
     }
 
-    const currentReport = prepareReportForSave();
+    setSavingReport(true);
+    setMessage(null);
 
     try {
-      await generatePDF(currentReport);
-      showMessage("success", "PDF generated successfully.");
+      const finalTotalHours =
+        reportData.totalHours ||
+        calculateTotalHours(reportData.startingHour, reportData.finishHour);
+
+      const payload = buildSupabasePayload({
+        reportData: {
+          ...reportData,
+          totalHours: finalTotalHours,
+        },
+        profile,
+        user,
+      });
+
+      let savedReport;
+
+      if (isEditMode) {
+        const { data, error } = await supabase
+          .from("reports")
+          .update(payload)
+          .eq("id", id)
+          .select("*")
+          .single();
+
+        if (error) {
+          throw error;
+        }
+
+        savedReport = data;
+      } else {
+        const { data, error } = await supabase
+          .from("reports")
+          .insert({
+            ...payload,
+            created_at: new Date().toISOString(),
+          })
+          .select("*")
+          .single();
+
+        if (error) {
+          throw error;
+        }
+
+        savedReport = data;
+      }
+
+      const finalReportData = {
+        ...reportData,
+        id: savedReport.id,
+        reportNumber: savedReport.report_number,
+        businessName: company?.business_name || reportData.businessName,
+        businessEmail: company?.business_email || reportData.businessEmail,
+        businessPhone: company?.business_phone || reportData.businessPhone,
+        businessLogo: company?.business_logo_url || reportData.businessLogo,
+        workerName: displayName || reportData.workerName,
+        totalHours: savedReport.total_hours || finalTotalHours,
+        createdAt: savedReport.created_at,
+        updatedAt: savedReport.updated_at,
+      };
+
+      setReportData(finalReportData);
+      saveLocalReportCopy(finalReportData);
+
+      setMessage({
+        type: "success",
+        text: isEditMode
+          ? "Report updated successfully."
+          : "Report saved successfully.",
+      });
+
+      if (!isEditMode) {
+        navigate(`/edit-report/${savedReport.id}`, { replace: true });
+      }
     } catch (error) {
-      console.error(error);
-      showMessage("warning", "There was an error generating the PDF.");
+      console.error("Error saving report:", error);
+      setMessage({
+        type: "danger",
+        text: error.message || "There was an error saving the report.",
+      });
+    } finally {
+      setSavingReport(false);
     }
   };
 
-  const handleClearForm = () => {
-    if (isEditMode) {
-      setReportData(initialReportData);
-      showMessage("info", "The form has been cleared.");
-      return;
-    }
-
-    const dataWithBusinessProfile = getReportDataWithBusinessProfile();
-
-    setReportData(dataWithBusinessProfile);
-
-    if (dataWithBusinessProfile.businessName) {
-      showMessage(
-        "info",
-        "The form has been cleared. Business profile was kept."
-      );
-      return;
-    }
-
-    showMessage("info", "The form has been cleared.");
+  const handleDownloadPDF = () => {
+    generatePDF(reportData);
   };
 
-  const handleSaveReport = () => {
-    if (!isReportValid()) {
-      showMessage(
-        "warning",
-        "Please add at least one detail before saving the report."
-      );
-      return;
-    }
-
-    const savedReports =
-      JSON.parse(localStorage.getItem("jobproofReports")) || [];
-
-    const preparedReport = prepareReportForSave();
-
-    if (isEditMode) {
-      const updatedReports = savedReports.map((report) =>
-        report.id === id
-          ? {
-              ...preparedReport,
-              id,
-              reportNumber:
-                reportData.reportNumber ||
-                report.reportNumber ||
-                generateReportNumber(),
-              createdAt: reportData.createdAt || new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            }
-          : report
-      );
-
-      localStorage.setItem("jobproofReports", JSON.stringify(updatedReports));
-
-      showMessage("success", "Report updated successfully.");
-
-      setTimeout(() => {
-        navigate(`/reports/${id}`);
-      }, 800);
-
-      return;
-    }
-
-    const newReport = {
-      ...preparedReport,
-      id: crypto.randomUUID(),
-      reportNumber: generateReportNumber(),
-      createdAt: new Date().toISOString(),
-    };
-
-    const updatedReports = [newReport, ...savedReports];
-
-    localStorage.setItem("jobproofReports", JSON.stringify(updatedReports));
-
-    setReportData(newReport);
-
-    showMessage(
-      "success",
-      `Report saved successfully: ${newReport.reportNumber}`
+  const handleClearForm = async () => {
+    const confirmClear = window.confirm(
+      "Are you sure you want to clear this form?"
     );
+
+    if (!confirmClear) return;
+
+    const reportNumber = canCreateReport
+      ? await generateReportNumber(profile.company_id)
+      : "";
+
+    setReportData({
+      ...createEmptyReport(),
+      reportNumber,
+      businessName: company?.business_name || "",
+      businessEmail: company?.business_email || "",
+      businessPhone: company?.business_phone || "",
+      businessLogo: company?.business_logo_url || "",
+      workerName: displayName || "",
+      jobDate: getTodayDate(),
+    });
+
+    setMessage(null);
   };
 
-  const getAlertClass = () => {
-    if (message.type === "success") return "alert alert-success";
-    if (message.type === "warning") return "alert alert-warning";
-    if (message.type === "info") return "alert alert-info";
+  if (loadingReport || profileLoading) {
+    return (
+      <section className="py-5 text-center">
+        <div className="spinner-border text-primary mb-3" role="status">
+          <span className="visually-hidden">Loading...</span>
+        </div>
+        <h1 className="h5">Loading report workspace</h1>
+        <p className="text-muted mb-0">
+          Please wait while JobProof prepares your report.
+        </p>
+      </section>
+    );
+  }
 
-    return "alert alert-secondary";
-  };
+  if (!profile?.company_id) {
+    return (
+      <section className="py-5">
+        <div className="card shadow-sm border-0">
+          <div className="card-body p-4 p-md-5 text-center">
+            <h1 className="h3 mb-3">Business Profile required</h1>
+            <p className="text-muted mb-4">
+              Before creating reports, you need to complete your company profile.
+              This information will be added automatically to every report.
+            </p>
+
+            <Link to="/business-profile" className="btn btn-primary">
+              Complete Business Profile
+            </Link>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
-    <section className="create-report-page">
-      <div className="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
+    <section>
+      <div className="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
         <div>
-          <h1 className="mb-1">
-            {isEditMode ? "Edit Job Report" : "Create Job Report"}
+          <p className="eyebrow mb-2">
+            {isEditMode ? "Edit report" : "Create report"}
+          </p>
+
+          <h1 className="section-title mb-2">
+            {isEditMode ? "Update job report" : "Create a new job report"}
           </h1>
 
-          {isEditMode && (
-            <p className="text-muted mb-0">
-              Update this saved report and keep the same record.
-            </p>
-          )}
-
-          {!isEditMode && reportData.businessName && (
-            <p className="text-muted mb-0">
-              Business profile loaded:{" "}
-              <strong>{reportData.businessName}</strong>
-            </p>
-          )}
-
-          {!isEditMode && reportData.workerName && (
-            <p className="text-muted mb-0">
-              Default worker: <strong>{reportData.workerName}</strong>
-            </p>
-          )}
-
-          {!isEditMode && reportData.reportNumber && (
-            <p className="text-muted mb-0">
-              Report number: <strong>{reportData.reportNumber}</strong>
-            </p>
-          )}
+          <p className="section-subtitle mb-0">
+            Company details are loaded automatically from your Business Profile.
+          </p>
         </div>
 
- <div className="desktop-report-actions d-flex gap-2 flex-wrap">
-  <button className="btn btn-primary" onClick={handleSaveReport}>
-    {isEditMode ? "Update Report" : "Save Report"}
-  </button>
+        <div className="desktop-report-actions d-flex gap-2 flex-wrap">
+          <button
+            className="btn btn-primary"
+            onClick={handleSaveReport}
+            disabled={savingReport}
+          >
+            {savingReport
+              ? "Saving..."
+              : isEditMode
+              ? "Update Report"
+              : "Save Report"}
+          </button>
 
-  <button className="btn btn-success" onClick={handleDownloadPDF}>
-    Download PDF
-  </button>
+          <button
+            className="btn btn-success"
+            onClick={handleDownloadPDF}
+            disabled={savingReport}
+          >
+            Download PDF
+          </button>
 
-  <button className="btn btn-outline-danger" onClick={handleClearForm}>
-    Clear Form
-  </button>
-</div>
-
-        <div className="mobile-clear-action">
-          <button className="btn btn-outline-danger" onClick={handleClearForm}>
+          <button
+            className="btn btn-outline-danger"
+            onClick={handleClearForm}
+            disabled={savingReport}
+          >
             Clear Form
           </button>
         </div>
       </div>
 
-      {message.text && (
-        <div className={getAlertClass()} role="alert">
+      {message && (
+        <div className={`alert alert-${message.type}`} role="alert">
           {message.text}
         </div>
       )}
 
       <div className="row g-4">
-        <div className="col-lg-5">
+        <div className="col-lg-7">
           <ReportForm reportData={reportData} setReportData={setReportData} />
         </div>
 
-        <div className="col-lg-7">
+        <div className="col-lg-5">
           <ReportPreview reportData={reportData} />
         </div>
       </div>
 
-      <div className="mobile-report-actions">
-        <button className="btn btn-primary mobile-action-button" onClick={handleSaveReport}>
-          {isEditMode ? "Update" : "Save"}
+      <div className="mobile-report-action-bar">
+        <button
+          className="btn btn-primary"
+          onClick={handleSaveReport}
+          disabled={savingReport}
+        >
+          {savingReport ? "Saving..." : isEditMode ? "Update" : "Save"}
         </button>
 
-        <button className="btn btn-success mobile-action-button" onClick={handleDownloadPDF}>
+        <button
+          className="btn btn-success"
+          onClick={handleDownloadPDF}
+          disabled={savingReport}
+        >
           PDF
         </button>
       </div>
