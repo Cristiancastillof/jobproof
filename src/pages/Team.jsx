@@ -710,7 +710,7 @@ const Team = () => {
                   className="form-control"
                   value={inviteForm.fullName}
                   onChange={handleChange}
-                  placeholder="Example: Juan Perez"
+                  placeholder="Example: Sarah Wilson"
                 />
               </div>
 
@@ -726,7 +726,7 @@ const Team = () => {
                   className="form-control"
                   value={inviteForm.email}
                   onChange={handleChange}
-                  placeholder="worker@email.com"
+                  placeholder="worker@example.com"
                 />
               </div>
 
