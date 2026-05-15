@@ -53,7 +53,9 @@ const getTeamSummary = (teamInvolved = [], creatorName = "") => {
     return firstPerson;
   }
 
-  return `${firstPerson} + ${othersCount} ${othersCount === 1 ? "other" : "others"}`;
+  return `${firstPerson} + ${othersCount} ${
+    othersCount === 1 ? "other" : "others"
+  }`;
 };
 
 const mapReportRow = (report) => {
@@ -207,6 +209,14 @@ const Reports = () => {
   }, [user, profile, profileLoading]);
 
   const handleDeleteReport = async (reportId) => {
+    if (isWorker) {
+      setMessage({
+        type: "warning",
+        text: "Workers cannot delete reports.",
+      });
+      return;
+    }
+
     const confirmDelete = window.confirm(
       "Are you sure you want to delete this report? This action cannot be undone."
     );
@@ -242,6 +252,12 @@ const Reports = () => {
           "There was an error deleting this report. Please check your permissions.",
       });
     }
+  };
+
+  const canEditReport = (report) => {
+    if (!isWorker) return true;
+
+    return report.createdBy === user?.id;
   };
 
   if (loadingReports || profileLoading) {
@@ -366,7 +382,9 @@ const Reports = () => {
                 <div className="d-flex justify-content-between gap-3 mb-2">
                   <div>
                     <p className="eyebrow mb-1">{report.reportNumber}</p>
+
                     <h2 className="h5 mb-1">{report.clientName}</h2>
+
                     <p className="text-muted small mb-0">
                       {formatDate(report.jobDate)}
                     </p>
@@ -396,12 +414,14 @@ const Reports = () => {
                     View
                   </Link>
 
-                  <Link
-                    to={`/edit-report/${report.id}`}
-                    className="btn btn-sm btn-outline-primary"
-                  >
-                    Edit
-                  </Link>
+                  {canEditReport(report) && (
+                    <Link
+                      to={`/edit-report/${report.id}`}
+                      className="btn btn-sm btn-outline-primary"
+                    >
+                      Edit
+                    </Link>
+                  )}
 
                   {!isWorker && (
                     <button
@@ -444,6 +464,7 @@ const Reports = () => {
 
                       <td>
                         <strong>{report.clientName}</strong>
+
                         <div className="text-muted small">
                           {report.jobAddress}
                         </div>
@@ -480,12 +501,14 @@ const Reports = () => {
                             View
                           </Link>
 
-                          <Link
-                            to={`/edit-report/${report.id}`}
-                            className="btn btn-outline-secondary"
-                          >
-                            Edit
-                          </Link>
+                          {canEditReport(report) && (
+                            <Link
+                              to={`/edit-report/${report.id}`}
+                              className="btn btn-outline-secondary"
+                            >
+                              Edit
+                            </Link>
+                          )}
 
                           {!isWorker && (
                             <button

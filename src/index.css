@@ -2793,3 +2793,63 @@ body {
     display: none;
   }
 }
+/* Reports team summary */
+
+.reports-team-pill {
+  display: inline-flex;
+  align-items: center;
+  max-width: 220px;
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: rgba(30, 64, 175, 0.08);
+  color: var(--jp-blue);
+  font-size: 0.82rem;
+  font-weight: 900;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reports-mobile-meta {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 6px 10px;
+  padding: 12px;
+  border-radius: 16px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.reports-mobile-meta span {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.reports-mobile-meta strong {
+  color: var(--jp-navy);
+  font-weight: 900;
+}
+
+/* Reports responsive visibility */
+
+.reports-mobile-list {
+  display: none;
+}
+
+.reports-table-card {
+  display: block;
+}
+
+@media (max-width: 768px) {
+  .reports-mobile-list {
+    display: grid;
+    gap: 16px;
+  }
+
+  .reports-table-card {
+    display: none;
+  }
+}
