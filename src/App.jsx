@@ -1,6 +1,8 @@
 import { Route, Routes } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
+import ProtectedRoute from "./components/ProtectedRoute";
+import PublicRoute from "./components/PublicRoute";
 import Home from "./pages/Home";
 import CreateReport from "./pages/CreateReport";
 import Reports from "./pages/Reports";
@@ -17,13 +19,69 @@ const App = () => {
       <main className="container py-4">
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/create-report" element={<CreateReport />} />
-          <Route path="/edit-report/:id" element={<CreateReport />} />
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/reports/:id" element={<ReportDetails />} />
-          <Route path="/business-profile" element={<BusinessProfile />} />
+
+          <Route
+            path="/login"
+            element={
+              <PublicRoute>
+                <Login />
+              </PublicRoute>
+            }
+          />
+
+          <Route
+            path="/register"
+            element={
+              <PublicRoute>
+                <Register />
+              </PublicRoute>
+            }
+          />
+
+          <Route
+            path="/business-profile"
+            element={
+              <ProtectedRoute>
+                <BusinessProfile />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/create-report"
+            element={
+              <ProtectedRoute>
+                <CreateReport />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/edit-report/:id"
+            element={
+              <ProtectedRoute>
+                <CreateReport />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/reports"
+            element={
+              <ProtectedRoute>
+                <Reports />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/reports/:id"
+            element={
+              <ProtectedRoute>
+                <ReportDetails />
+              </ProtectedRoute>
+            }
+          />
         </Routes>
       </main>
 

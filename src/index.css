@@ -1955,3 +1955,22 @@ body {
     display: none !important;
   }
 }
+/* Protected route loading state */
+
+.auth-loading-page {
+  min-height: calc(100vh - 180px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 0;
+}
+
+.auth-loading-card {
+  width: 100%;
+  max-width: 420px;
+  border-radius: 24px;
+}
+
+.auth-loading-card .card-body {
+  padding: 32px;
+}
