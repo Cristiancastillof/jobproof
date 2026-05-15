@@ -2387,3 +2387,27 @@ body {
     min-width: 860px;
   }
 }
+/* Invitation register */
+
+.invite-summary-box {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+  padding: 16px;
+  border-radius: 18px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.invite-summary-box span {
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.invite-summary-box strong {
+  color: var(--jp-navy);
+  font-weight: 900;
+}
