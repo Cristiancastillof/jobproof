@@ -114,6 +114,7 @@ const getLocalReports = () => {
 
 const saveLocalReportCopy = (reportToSave) => {
   const currentReports = getLocalReports();
+
   const existingIndex = currentReports.findIndex(
     (report) => report.id === reportToSave.id
   );
@@ -147,6 +148,24 @@ const generateReportNumber = async (companyId) => {
   }
 
   return `${prefix}-${String((count || 0) + 1).padStart(4, "0")}`;
+};
+
+const getStoragePathFromPublicUrl = (publicUrl) => {
+  if (!publicUrl || typeof publicUrl !== "string") return null;
+
+  const marker = `/${REPORT_PHOTOS_BUCKET}/`;
+  const markerIndex = publicUrl.indexOf(marker);
+
+  if (markerIndex === -1) return null;
+
+  const pathWithPossibleQuery = publicUrl.slice(markerIndex + marker.length);
+  const cleanPath = pathWithPossibleQuery.split("?")[0];
+
+  try {
+    return decodeURIComponent(cleanPath);
+  } catch {
+    return cleanPath;
+  }
 };
 
 const getFileExtension = (file) => {
@@ -262,6 +281,7 @@ const CreateReport = () => {
         }
       } catch (error) {
         console.error("Error loading report data:", error);
+
         setMessage({
           type: "danger",
           text: error.message || "There was an error loading this report.",
@@ -278,7 +298,8 @@ const CreateReport = () => {
     const { data: savedPhotos, error } = await supabase
       .from("report_photos")
       .select("id, photo_type, photo_url")
-      .eq("report_id", reportId);
+      .eq("report_id", reportId)
+      .eq("company_id", profile.company_id);
 
     if (error) {
       throw error;
@@ -295,7 +316,21 @@ const CreateReport = () => {
 
     if (photosToDelete.length === 0) return;
 
-    const { error: deleteError } = await supabase
+    const storagePathsToDelete = photosToDelete
+      .map((photo) => getStoragePathFromPublicUrl(photo.photo_url))
+      .filter(Boolean);
+
+    if (storagePathsToDelete.length > 0) {
+      const { error: storageDeleteError } = await supabase.storage
+        .from(REPORT_PHOTOS_BUCKET)
+        .remove(storagePathsToDelete);
+
+      if (storageDeleteError) {
+        throw storageDeleteError;
+      }
+    }
+
+    const { error: deleteRowsError } = await supabase
       .from("report_photos")
       .delete()
       .in(
@@ -303,8 +338,8 @@ const CreateReport = () => {
         photosToDelete.map((photo) => photo.id)
       );
 
-    if (deleteError) {
-      throw deleteError;
+    if (deleteRowsError) {
+      throw deleteRowsError;
     }
   };
 
@@ -321,7 +356,10 @@ const CreateReport = () => {
       for (let index = 0; index < newPhotos.length; index += 1) {
         const photo = newPhotos[index];
         const extension = getFileExtension(photo.file);
-        const filePath = `${profile.company_id}/${reportId}/${dbPhotoType}-${Date.now()}-${index}.${extension}`;
+
+        const filePath = `${
+          profile.company_id
+        }/${reportId}/${dbPhotoType}-${Date.now()}-${index}.${extension}`;
 
         const { error: uploadError } = await supabase.storage
           .from(REPORT_PHOTOS_BUCKET)
@@ -473,14 +511,16 @@ const CreateReport = () => {
       setPhotoFiles(createEmptyPhotoFiles());
       saveLocalReportCopy(finalReportData);
 
+      const hasNewPhotos =
+        photoFiles.beforePhotos.length > 0 || photoFiles.afterPhotos.length > 0;
+
       setMessage({
         type: "success",
-        text:
-          photoFiles.beforePhotos.length > 0 || photoFiles.afterPhotos.length > 0
-            ? "Report and photos saved successfully."
-            : isEditMode
-            ? "Report updated successfully."
-            : "Report saved successfully.",
+        text: hasNewPhotos
+          ? "Report and photos saved successfully."
+          : isEditMode
+          ? "Report updated successfully."
+          : "Report saved successfully.",
       });
 
       if (!isEditMode) {
@@ -488,6 +528,7 @@ const CreateReport = () => {
       }
     } catch (error) {
       console.error("Error saving report:", error);
+
       setMessage({
         type: "danger",
         text: error.message || "There was an error saving the report.",
@@ -533,7 +574,9 @@ const CreateReport = () => {
         <div className="spinner-border text-primary mb-3" role="status">
           <span className="visually-hidden">Loading...</span>
         </div>
+
         <h1 className="h5">Loading report workspace</h1>
+
         <p className="text-muted mb-0">
           Please wait while JobProof prepares your report.
         </p>
@@ -547,6 +590,7 @@ const CreateReport = () => {
         <div className="card shadow-sm border-0">
           <div className="card-body p-4 p-md-5 text-center">
             <h1 className="h3 mb-3">Business Profile required</h1>
+
             <p className="text-muted mb-4">
               Before creating reports, you need to complete your company profile.
               This information will be added automatically to every report.
