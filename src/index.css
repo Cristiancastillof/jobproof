@@ -1974,3 +1974,63 @@ body {
 .auth-loading-card .card-body {
   padding: 32px;
 }
+/* Reports page */
+
+.reports-summary-box {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  color: #334155;
+}
+
+.reports-summary-label {
+  color: #64748b;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.reports-summary-divider {
+  width: 1px;
+  height: 22px;
+  background: rgba(15, 23, 42, 0.14);
+  margin: 0 4px;
+}
+
+.reports-table thead th {
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  padding: 14px 16px;
+}
+
+.reports-table tbody td {
+  padding: 16px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.reports-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.reports-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+@media (max-width: 768px) {
+  .reports-summary-box {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .reports-table {
+    min-width: 900px;
+  }
+}

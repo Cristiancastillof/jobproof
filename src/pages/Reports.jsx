@@ -1,16 +1,122 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabaseClient";
+
+const formatDate = (dateValue) => {
+  if (!dateValue) return "Not specified";
+
+  const date = new Date(`${dateValue}T00:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return dateValue;
+  }
+
+  return date.toLocaleDateString("en-AU", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const formatCreatedAt = (dateValue) => {
+  if (!dateValue) return "Not available";
+
+  const date = new Date(dateValue);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Not available";
+  }
+
+  return date.toLocaleDateString("en-AU", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const getStatusBadgeClass = (status) => {
+  if (status === "approved") return "bg-success";
+  if (status === "submitted") return "bg-primary";
+  if (status === "draft") return "bg-secondary";
+  if (status === "archived") return "bg-dark";
+
+  return "bg-info text-dark";
+};
 
 const Reports = () => {
+  const { user, profile, displayRole, profileLoading } = useAuth();
+
   const [reports, setReports] = useState([]);
+  const [loadingReports, setLoadingReports] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [message, setMessage] = useState(null);
 
   useEffect(() => {
-    const savedReports =
-      JSON.parse(localStorage.getItem("jobproofReports")) || [];
+    const loadReports = async () => {
+      if (profileLoading) return;
 
-    setReports(savedReports);
-  }, []);
+      if (!user?.id) {
+        setLoadingReports(false);
+        return;
+      }
+
+      if (!profile?.company_id) {
+        setLoadingReports(false);
+        setMessage({
+          type: "warning",
+          text: "Please complete your Business Profile before viewing reports.",
+        });
+        return;
+      }
+
+      setLoadingReports(true);
+      setMessage(null);
+
+      try {
+        const { data, error } = await supabase
+          .from("reports")
+          .select(
+            `
+            id,
+            report_number,
+            client_name,
+            job_address,
+            job_date,
+            service_type,
+            total_hours,
+            status,
+            created_at,
+            updated_at,
+            created_by,
+            profiles:created_by (
+              full_name,
+              email,
+              role
+            )
+          `
+          )
+          .eq("company_id", profile.company_id)
+          .order("created_at", { ascending: false });
+
+        if (error) {
+          throw error;
+        }
+
+        setReports(data || []);
+      } catch (error) {
+        console.error("Error loading reports:", error);
+        setMessage({
+          type: "danger",
+          text: error.message || "There was an error loading reports.",
+        });
+      } finally {
+        setLoadingReports(false);
+      }
+    };
+
+    loadReports();
+  }, [user, profile, profileLoading]);
 
   const filteredReports = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -19,18 +125,13 @@ const Reports = () => {
 
     return reports.filter((report) => {
       const searchableText = [
-        report.reportNumber,
-        report.clientName,
-        report.businessName,
-        report.businessEmail,
-        report.businessPhone,
-        report.workerName,
-        report.jobAddress,
-        report.serviceType,
-        report.jobDate,
-        report.workCompleted,
-        report.issuesFound,
-        report.recommendations,
+        report.report_number,
+        report.client_name,
+        report.job_address,
+        report.service_type,
+        report.status,
+        report.profiles?.full_name,
+        report.profiles?.email,
       ]
         .filter(Boolean)
         .join(" ")
@@ -40,70 +141,35 @@ const Reports = () => {
     });
   }, [reports, searchTerm]);
 
-  const handleDeleteReport = (reportId) => {
-    const confirmDelete = window.confirm(
-      "Are you sure you want to delete this report?"
-    );
-
-    if (!confirmDelete) return;
-
-    const updatedReports = reports.filter((report) => report.id !== reportId);
-
-    localStorage.setItem("jobproofReports", JSON.stringify(updatedReports));
-    setReports(updatedReports);
-  };
-
-  const handleClearAllReports = () => {
-    const confirmClear = window.confirm(
-      "Are you sure you want to delete all saved reports? This action cannot be undone."
-    );
-
-    if (!confirmClear) return;
-
-    localStorage.removeItem("jobproofReports");
-    setReports([]);
-    setSearchTerm("");
-  };
-
-  const renderSmallPhotos = (photos) => {
-    if (!photos || photos.length === 0) {
-      return <small className="text-muted">No photos</small>;
-    }
-
+  if (loadingReports || profileLoading) {
     return (
-      <div className="saved-report-photo-list">
-        {photos.slice(0, 3).map((photo, index) => (
-          <img
-            key={`${photo.slice(0, 20)}-${index}`}
-            src={photo}
-            alt={`Saved report photo ${index + 1}`}
-            className="saved-report-thumb"
-          />
-        ))}
-
-        {photos.length > 3 && (
-          <small className="text-muted align-self-center">
-            +{photos.length - 3} more
-          </small>
-        )}
-      </div>
-    );
-  };
-
-  if (reports.length === 0) {
-    return (
-      <section>
-        <div className="d-flex justify-content-between align-items-center mb-4">
-          <h1 className="mb-0">Reports</h1>
-
-          <Link to="/create-report" className="btn btn-primary">
-            Create Report
-          </Link>
+      <section className="py-5 text-center">
+        <div className="spinner-border text-primary mb-3" role="status">
+          <span className="visually-hidden">Loading...</span>
         </div>
 
-        <div className="alert alert-secondary">
-          No saved reports yet. Create a report and click Save Report to see it
-          here.
+        <h1 className="h5">Loading reports</h1>
+        <p className="text-muted mb-0">
+          Please wait while JobProof loads your company reports.
+        </p>
+      </section>
+    );
+  }
+
+  if (!profile?.company_id) {
+    return (
+      <section className="py-5">
+        <div className="card shadow-sm border-0">
+          <div className="card-body p-4 p-md-5 text-center">
+            <h1 className="h3 mb-3">Business Profile required</h1>
+            <p className="text-muted mb-4">
+              Complete your Business Profile before viewing reports.
+            </p>
+
+            <Link to="/business-profile" className="btn btn-primary">
+              Complete Business Profile
+            </Link>
+          </div>
         </div>
       </section>
     );
@@ -111,12 +177,14 @@ const Reports = () => {
 
   return (
     <section>
-      <div className="d-flex justify-content-between align-items-center mb-4">
+      <div className="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4">
         <div>
-          <h1 className="mb-1">Saved Reports</h1>
-          <p className="text-muted mb-0">
-            You have {reports.length} saved report
-            {reports.length === 1 ? "" : "s"}.
+          <p className="eyebrow mb-2">Reports</p>
+
+          <h1 className="section-title mb-2">Company job reports</h1>
+
+          <p className="section-subtitle mb-0">
+            Review, search and manage reports saved in your JobProof workspace.
           </p>
         </div>
 
@@ -124,145 +192,151 @@ const Reports = () => {
           <Link to="/create-report" className="btn btn-primary">
             Create Report
           </Link>
-
-          <button
-            className="btn btn-outline-danger"
-            onClick={handleClearAllReports}
-          >
-            Clear All
-          </button>
         </div>
       </div>
 
-      <div className="card shadow-sm mb-4">
-        <div className="card-body">
-          <label htmlFor="reportsSearch" className="form-label">
-            Search reports
-          </label>
+      {message && (
+        <div className={`alert alert-${message.type}`} role="alert">
+          {message.text}
+        </div>
+      )}
 
-          <input
-            id="reportsSearch"
-            type="text"
-            className="form-control"
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Search by report number, client, worker, business, email, phone, address or service..."
-          />
+      <div className="card shadow-sm border-0 mb-4">
+        <div className="card-body p-3 p-md-4">
+          <div className="row g-3 align-items-center">
+            <div className="col-lg-7">
+              <label htmlFor="reportSearch" className="form-label">
+                Search reports
+              </label>
 
-          <small className="text-muted d-block mt-2">
-            Showing {filteredReports.length} of {reports.length} report
-            {reports.length === 1 ? "" : "s"}.
-          </small>
+              <input
+                id="reportSearch"
+                type="search"
+                className="form-control"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Search by report number, client, address, service or worker"
+              />
+            </div>
+
+            <div className="col-lg-5">
+              <div className="reports-summary-box">
+                <span className="reports-summary-label">Total reports</span>
+                <strong>{reports.length}</strong>
+                <span className="reports-summary-divider"></span>
+                <span className="reports-summary-label">Your role</span>
+                <strong>{displayRole}</strong>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
       {filteredReports.length === 0 ? (
-        <div className="alert alert-warning">
-          No reports matched your search. Try another report number, client,
-          worker, business, email, phone, address or service type.
+        <div className="card shadow-sm border-0">
+          <div className="card-body p-4 p-md-5 text-center">
+            <h2 className="h4 mb-3">
+              {reports.length === 0 ? "No reports yet" : "No matching reports"}
+            </h2>
+
+            <p className="text-muted mb-4">
+              {reports.length === 0
+                ? "Create your first job report to start building your company history."
+                : "Try another search term or clear the search field."}
+            </p>
+
+            {reports.length === 0 && (
+              <Link to="/create-report" className="btn btn-primary">
+                Create First Report
+              </Link>
+            )}
+          </div>
         </div>
       ) : (
-        <div className="row g-3">
-          {filteredReports.map((report) => (
-            <div className="col-md-6 col-lg-4" key={report.id}>
-              <div className="card shadow-sm h-100 saved-report-card">
-                <div className="card-body d-flex flex-column">
-                  <div className="d-flex justify-content-between align-items-start gap-2 mb-2">
-                    <h2 className="h5 mb-0">
-                      {report.clientName || "Unnamed client"}
-                    </h2>
+        <div className="card shadow-sm border-0">
+          <div className="table-responsive">
+            <table className="table align-middle mb-0 reports-table">
+              <thead>
+                <tr>
+                  <th>Report</th>
+                  <th>Client</th>
+                  <th>Job date</th>
+                  <th>Service</th>
+                  <th>Worker</th>
+                  <th>Status</th>
+                  <th className="text-end">Actions</th>
+                </tr>
+              </thead>
 
-                    <span className="badge bg-primary-subtle text-primary border border-primary-subtle">
-                      {report.reportNumber || "No number"}
-                    </span>
-                  </div>
+              <tbody>
+                {filteredReports.map((report) => (
+                  <tr key={report.id}>
+                    <td>
+                      <div className="fw-bold">
+                        {report.report_number || "No report number"}
+                      </div>
+                      <div className="text-muted small">
+                        Created {formatCreatedAt(report.created_at)}
+                      </div>
+                    </td>
 
-                  <p className="text-muted mb-1">
-                    <strong>Business:</strong>{" "}
-                    {report.businessName || "No business name"}
-                  </p>
+                    <td>
+                      <div className="fw-semibold">
+                        {report.client_name || "Not specified"}
+                      </div>
+                      <div className="text-muted small">
+                        {report.job_address || "No address added"}
+                      </div>
+                    </td>
 
-                  {report.businessEmail && (
-                    <p className="text-muted mb-1">
-                      <strong>Email:</strong> {report.businessEmail}
-                    </p>
-                  )}
+                    <td>{formatDate(report.job_date)}</td>
 
-                  {report.businessPhone && (
-                    <p className="text-muted mb-1">
-                      <strong>Phone:</strong> {report.businessPhone}
-                    </p>
-                  )}
+                    <td>
+                      <div>{report.service_type || "Not specified"}</div>
+                      <div className="text-muted small">
+                        {report.total_hours || "No hours recorded"}
+                      </div>
+                    </td>
 
-                  <p className="text-muted mb-1">
-                    <strong>Completed by:</strong>{" "}
-                    {report.workerName || "No worker assigned"}
-                  </p>
+                    <td>
+                      <div>{report.profiles?.full_name || "Unknown user"}</div>
+                      <div className="text-muted small">
+                        {report.profiles?.role || "worker"}
+                      </div>
+                    </td>
 
-                  <p className="text-muted mb-1">
-                    <strong>Service:</strong>{" "}
-                    {report.serviceType || "No service type"}
-                  </p>
-
-                  <p className="text-muted mb-1">
-                    <strong>Date:</strong> {report.jobDate || "No job date"}
-                  </p>
-
-                  <p className="text-muted mb-3">
-                    <strong>Address:</strong>{" "}
-                    {report.jobAddress || "No job address"}
-                  </p>
-
-                  <p className="small">
-                    {report.workCompleted
-                      ? report.workCompleted.slice(0, 120)
-                      : "No work notes added."}
-                    {report.workCompleted && report.workCompleted.length > 120
-                      ? "..."
-                      : ""}
-                  </p>
-
-                  <div className="mb-3">
-                    <strong className="small d-block mb-1">
-                      Before photos
-                    </strong>
-                    {renderSmallPhotos(report.beforePhotos)}
-                  </div>
-
-                  <div className="mb-3">
-                    <strong className="small d-block mb-1">
-                      After photos
-                    </strong>
-                    {renderSmallPhotos(report.afterPhotos)}
-                  </div>
-
-                  <div className="d-flex justify-content-between align-items-center mt-auto">
-                    <small className="text-muted">
-                      {report.createdAt
-                        ? new Date(report.createdAt).toLocaleDateString()
-                        : "No saved date"}
-                    </small>
-
-                    <div className="d-flex gap-2">
-                      <Link
-                        to={`/reports/${report.id}`}
-                        className="btn btn-sm btn-primary"
+                    <td>
+                      <span
+                        className={`badge ${getStatusBadgeClass(
+                          report.status
+                        )}`}
                       >
-                        View
-                      </Link>
+                        {report.status || "completed"}
+                      </span>
+                    </td>
 
-                      <button
-                        className="btn btn-sm btn-outline-danger"
-                        onClick={() => handleDeleteReport(report.id)}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
+                    <td className="text-end">
+                      <div className="btn-group btn-group-sm">
+                        <Link
+                          to={`/reports/${report.id}`}
+                          className="btn btn-outline-primary"
+                        >
+                          View
+                        </Link>
+
+                        <Link
+                          to={`/edit-report/${report.id}`}
+                          className="btn btn-outline-secondary"
+                        >
+                          Edit
+                        </Link>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </section>
