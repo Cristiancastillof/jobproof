@@ -2411,3 +2411,41 @@ body {
   color: var(--jp-navy);
   font-weight: 900;
 }
+/* Team overview */
+
+.team-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+}
+
+.team-overview-card {
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+  border-radius: 20px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+}
+
+.team-overview-card span {
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.team-overview-card strong {
+  color: var(--jp-navy);
+  font-size: 2rem;
+  line-height: 1;
+  font-weight: 900;
+}
+
+@media (max-width: 768px) {
+  .team-overview-grid {
+    grid-template-columns: 1fr;
+  }
+}

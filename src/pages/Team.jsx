@@ -33,6 +33,13 @@ const getStatusBadgeClass = (status) => {
   return "bg-warning text-dark";
 };
 
+const getRoleBadgeClass = (role) => {
+  if (role === "admin") return "bg-primary";
+  if (role === "supervisor") return "bg-info text-dark";
+
+  return "bg-secondary";
+};
+
 const getInviteLink = (inviteToken) => {
   return `${window.location.origin}/register?invite=${inviteToken}`;
 };
@@ -42,8 +49,10 @@ const Team = () => {
 
   const [inviteForm, setInviteForm] = useState(createEmptyInviteForm);
   const [invitations, setInvitations] = useState([]);
+  const [teamMembers, setTeamMembers] = useState([]);
   const [loadingTeam, setLoadingTeam] = useState(true);
   const [creatingInvite, setCreatingInvite] = useState(false);
+  const [updatingMemberId, setUpdatingMemberId] = useState(null);
   const [copiedInviteId, setCopiedInviteId] = useState(null);
   const [message, setMessage] = useState(null);
 
@@ -63,7 +72,60 @@ const Team = () => {
     );
   }, [invitations]);
 
+  const activeMembers = useMemo(() => {
+    return teamMembers.filter((member) => member.active);
+  }, [teamMembers]);
+
+  const inactiveMembers = useMemo(() => {
+    return teamMembers.filter((member) => !member.active);
+  }, [teamMembers]);
+
+  const loadTeamMembers = async () => {
+    if (!profile?.company_id || !isAdmin) return;
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, company_id, full_name, email, role, active, created_at")
+      .eq("company_id", profile.company_id)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      throw error;
+    }
+
+    setTeamMembers(data || []);
+  };
+
   const loadInvitations = async () => {
+    if (!profile?.company_id || !isAdmin) return;
+
+    const { data, error } = await supabase
+      .from("team_invitations")
+      .select(
+        `
+        id,
+        company_id,
+        email,
+        full_name,
+        role,
+        invite_token,
+        status,
+        created_at,
+        expires_at,
+        accepted_at
+      `
+      )
+      .eq("company_id", profile.company_id)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    setInvitations(data || []);
+  };
+
+  const loadTeam = async () => {
     if (!profile?.company_id || !isAdmin) {
       setLoadingTeam(false);
       return;
@@ -73,32 +135,9 @@ const Team = () => {
     setMessage(null);
 
     try {
-      const { data, error } = await supabase
-        .from("team_invitations")
-        .select(
-          `
-          id,
-          company_id,
-          email,
-          full_name,
-          role,
-          invite_token,
-          status,
-          created_at,
-          expires_at,
-          accepted_at
-        `
-        )
-        .eq("company_id", profile.company_id)
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        throw error;
-      }
-
-      setInvitations(data || []);
+      await Promise.all([loadTeamMembers(), loadInvitations()]);
     } catch (error) {
-      console.error("Error loading team invitations:", error);
+      console.error("Error loading team:", error);
 
       setMessage({
         type: "danger",
@@ -117,7 +156,7 @@ const Team = () => {
       return;
     }
 
-    loadInvitations();
+    loadTeam();
   }, [user, profile, profileLoading]);
 
   const handleChange = (event) => {
@@ -282,6 +321,163 @@ const Team = () => {
     }
   };
 
+  const handleToggleMemberStatus = async (member) => {
+    if (member.id === user.id) {
+      setMessage({
+        type: "warning",
+        text: "You cannot deactivate your own admin account.",
+      });
+      return;
+    }
+
+    const nextStatus = !member.active;
+
+    const confirmUpdate = window.confirm(
+      nextStatus
+        ? `Reactivate ${member.full_name}?`
+        : `Deactivate ${member.full_name}?`
+    );
+
+    if (!confirmUpdate) return;
+
+    setUpdatingMemberId(member.id);
+    setMessage(null);
+
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          active: nextStatus,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", member.id)
+        .eq("company_id", profile.company_id);
+
+      if (error) {
+        throw error;
+      }
+
+      setTeamMembers((currentMembers) =>
+        currentMembers.map((currentMember) =>
+          currentMember.id === member.id
+            ? { ...currentMember, active: nextStatus }
+            : currentMember
+        )
+      );
+
+      setMessage({
+        type: "success",
+        text: nextStatus
+          ? "Team member reactivated."
+          : "Team member deactivated.",
+      });
+    } catch (error) {
+      console.error("Error updating team member:", error);
+
+      setMessage({
+        type: "danger",
+        text:
+          error.message || "There was an error updating this team member.",
+      });
+    } finally {
+      setUpdatingMemberId(null);
+    }
+  };
+
+  const renderMembersTable = (title, membersList, emptyText) => {
+    return (
+      <div className="card shadow-sm border-0 team-card mb-4">
+        <div className="card-body p-4">
+          <div className="d-flex justify-content-between align-items-center gap-3 mb-3">
+            <div>
+              <h2 className="h5 mb-1">{title}</h2>
+              <p className="text-muted mb-0">{membersList.length} members</p>
+            </div>
+          </div>
+
+          {membersList.length === 0 ? (
+            <div className="team-empty-state">
+              <p className="text-muted mb-0">{emptyText}</p>
+            </div>
+          ) : (
+            <div className="table-responsive">
+              <table className="table align-middle mb-0 team-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Joined</th>
+                    <th className="text-end">Actions</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {membersList.map((member) => (
+                    <tr key={member.id}>
+                      <td>
+                        <strong>{member.full_name}</strong>
+                        {member.id === user.id && (
+                          <div className="text-muted small">Current user</div>
+                        )}
+                      </td>
+
+                      <td>{member.email}</td>
+
+                      <td>
+                        <span
+                          className={`badge ${getRoleBadgeClass(member.role)}`}
+                        >
+                          {member.role}
+                        </span>
+                      </td>
+
+                      <td>
+                        <span
+                          className={`badge ${
+                            member.active ? "bg-success" : "bg-secondary"
+                          }`}
+                        >
+                          {member.active ? "active" : "inactive"}
+                        </span>
+                      </td>
+
+                      <td>{formatDate(member.created_at)}</td>
+
+                      <td className="text-end">
+                        {member.id === user.id ? (
+                          <span className="text-muted small">No actions</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${
+                              member.active
+                                ? "btn-outline-danger"
+                                : "btn-outline-success"
+                            }`}
+                            onClick={() => handleToggleMemberStatus(member)}
+                            disabled={updatingMemberId === member.id}
+                          >
+                            {updatingMemberId === member.id
+                              ? "Updating..."
+                              : member.active
+                              ? "Deactivate"
+                              : "Reactivate"}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderInvitationTable = (title, inviteList, emptyText) => {
     return (
       <div className="card shadow-sm border-0 team-card mb-4">
@@ -443,11 +639,11 @@ const Team = () => {
         <div>
           <p className="eyebrow mb-2">Team management</p>
 
-          <h1 className="section-title mb-2">Invite your team</h1>
+          <h1 className="section-title mb-2">Manage your team</h1>
 
           <p className="section-subtitle mb-0">
-            Create secure invitation links for supervisors and workers. Send the
-            link manually by WhatsApp, SMS or email.
+            Invite supervisors and workers, review active members and control
+            who can access your JobProof workspace.
           </p>
         </div>
       </div>
@@ -457,6 +653,36 @@ const Team = () => {
           {message.text}
         </div>
       )}
+
+      <div className="team-overview-grid mb-4">
+        <div className="team-overview-card">
+          <span>Active members</span>
+          <strong>{activeMembers.length}</strong>
+        </div>
+
+        <div className="team-overview-card">
+          <span>Pending invites</span>
+          <strong>{pendingInvitations.length}</strong>
+        </div>
+
+        <div className="team-overview-card">
+          <span>Accepted invites</span>
+          <strong>{acceptedInvitations.length}</strong>
+        </div>
+      </div>
+
+      {renderMembersTable(
+        "Active team members",
+        activeMembers,
+        "No active team members found."
+      )}
+
+      {inactiveMembers.length > 0 &&
+        renderMembersTable(
+          "Inactive team members",
+          inactiveMembers,
+          "No inactive members."
+        )}
 
       <div className="row g-4">
         <div className="col-lg-5">
@@ -544,7 +770,7 @@ const Team = () => {
             <ul className="mb-0">
               <li>Create an invitation with email and role.</li>
               <li>Copy the invite link and send it manually.</li>
-              <li>The next step will connect registration to this invite link.</li>
+              <li>The user registers with that link and joins your company.</li>
             </ul>
           </div>
 
