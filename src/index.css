@@ -2034,3 +2034,33 @@ body {
     min-width: 900px;
   }
 }
+/* Report details */
+
+.report-meta-list {
+  display: grid;
+  gap: 14px;
+}
+
+.report-meta-list div {
+  display: grid;
+  gap: 4px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.report-meta-list div:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.report-meta-list span {
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.report-meta-list strong {
+  color: #0f172a;
+  font-size: 0.95rem;
+  word-break: break-word;
+}
