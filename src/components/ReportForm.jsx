@@ -1,6 +1,11 @@
 import { calculateTotalHours } from "../utils/calculateTotalHours";
 
-const ReportForm = ({ reportData, setReportData }) => {
+const ReportForm = ({
+  reportData,
+  setReportData,
+  photoFiles,
+  setPhotoFiles,
+}) => {
   const totalHours =
     reportData.totalHours ||
     calculateTotalHours(reportData.startingHour, reportData.finishHour);
@@ -23,35 +28,47 @@ const ReportForm = ({ reportData, setReportData }) => {
     setReportData(updatedReportData);
   };
 
-  const handlePhotoUpload = (event, photoType) => {
+  const readFileAsDataUrl = (file) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+
+      reader.onload = () => {
+        resolve({
+          file,
+          previewUrl: reader.result,
+        });
+      };
+
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handlePhotoUpload = async (event, photoType) => {
     const files = Array.from(event.target.files);
 
     if (files.length === 0) return;
 
-    const readers = files.map(
-      (file) =>
-        new Promise((resolve) => {
-          const reader = new FileReader();
+    const uploadedPhotos = await Promise.all(files.map(readFileAsDataUrl));
+    const previewUrls = uploadedPhotos.map((photo) => photo.previewUrl);
 
-          reader.onload = () => {
-            resolve(reader.result);
-          };
-
-          reader.readAsDataURL(file);
-        })
-    );
-
-    Promise.all(readers).then((uploadedPhotos) => {
-      setReportData({
-        ...reportData,
-        [photoType]: [...(reportData[photoType] || []), ...uploadedPhotos],
-      });
+    setReportData({
+      ...reportData,
+      [photoType]: [...(reportData[photoType] || []), ...previewUrls],
     });
+
+    if (setPhotoFiles) {
+      setPhotoFiles((currentPhotoFiles) => ({
+        ...currentPhotoFiles,
+        [photoType]: [...(currentPhotoFiles[photoType] || []), ...uploadedPhotos],
+      }));
+    }
 
     event.target.value = "";
   };
 
   const handleRemovePhoto = (photoType, photoIndex) => {
+    const photoToRemove = reportData[photoType][photoIndex];
+
     const updatedPhotos = reportData[photoType].filter(
       (_, index) => index !== photoIndex
     );
@@ -60,6 +77,15 @@ const ReportForm = ({ reportData, setReportData }) => {
       ...reportData,
       [photoType]: updatedPhotos,
     });
+
+    if (setPhotoFiles) {
+      setPhotoFiles((currentPhotoFiles) => ({
+        ...currentPhotoFiles,
+        [photoType]: (currentPhotoFiles[photoType] || []).filter(
+          (photo) => photo.previewUrl !== photoToRemove
+        ),
+      }));
+    }
   };
 
   const renderPhotoUploader = (title, photoType, inputId) => {
@@ -117,7 +143,7 @@ const ReportForm = ({ reportData, setReportData }) => {
         ) : (
           <div className="row g-2 mt-2">
             {photos.map((photo, index) => (
-              <div className="col-6" key={`${photoType}-${index}`}>
+              <div className="col-6" key={`${photoType}-${index}-${photo}`}>
                 <div className="border rounded p-2 bg-light">
                   <img
                     src={photo}

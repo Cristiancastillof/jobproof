@@ -8,6 +8,7 @@ import { calculateTotalHours } from "../utils/calculateTotalHours";
 import { generatePDF } from "../utils/generatePDF";
 
 const LOCAL_REPORTS_KEY = "jobproofReports";
+const REPORT_PHOTOS_BUCKET = "report-photos";
 
 const getTodayDate = () => {
   return new Date().toISOString().split("T")[0];
@@ -41,29 +42,46 @@ const createEmptyReport = () => ({
   updatedAt: "",
 });
 
-const mapSupabaseReportToForm = (report, company, workerName) => ({
-  id: report.id || "",
-  reportNumber: report.report_number || "",
-  businessName: company?.business_name || "",
-  businessEmail: company?.business_email || "",
-  businessPhone: company?.business_phone || "",
-  businessLogo: company?.business_logo_url || "",
-  workerName: workerName || "",
-  clientName: report.client_name || "",
-  jobAddress: report.job_address || "",
-  jobDate: report.job_date || getTodayDate(),
-  startingHour: report.starting_hour ? report.starting_hour.slice(0, 5) : "",
-  finishHour: report.finish_hour ? report.finish_hour.slice(0, 5) : "",
-  totalHours: report.total_hours || "",
-  serviceType: report.service_type || "",
-  workCompleted: report.work_completed || "",
-  issuesFound: report.issues_found || "",
-  recommendations: report.recommendations || "",
+const createEmptyPhotoFiles = () => ({
   beforePhotos: [],
   afterPhotos: [],
-  createdAt: report.created_at || "",
-  updatedAt: report.updated_at || "",
 });
+
+const mapSupabaseReportToForm = (report, company, workerName, photos = []) => {
+  const beforePhotos = photos
+    .filter((photo) => photo.photo_type === "before")
+    .sort((a, b) => a.photo_order - b.photo_order)
+    .map((photo) => photo.photo_url);
+
+  const afterPhotos = photos
+    .filter((photo) => photo.photo_type === "after")
+    .sort((a, b) => a.photo_order - b.photo_order)
+    .map((photo) => photo.photo_url);
+
+  return {
+    id: report.id || "",
+    reportNumber: report.report_number || "",
+    businessName: company?.business_name || "",
+    businessEmail: company?.business_email || "",
+    businessPhone: company?.business_phone || "",
+    businessLogo: company?.business_logo_url || "",
+    workerName: workerName || "",
+    clientName: report.client_name || "",
+    jobAddress: report.job_address || "",
+    jobDate: report.job_date || getTodayDate(),
+    startingHour: report.starting_hour ? report.starting_hour.slice(0, 5) : "",
+    finishHour: report.finish_hour ? report.finish_hour.slice(0, 5) : "",
+    totalHours: report.total_hours || "",
+    serviceType: report.service_type || "",
+    workCompleted: report.work_completed || "",
+    issuesFound: report.issues_found || "",
+    recommendations: report.recommendations || "",
+    beforePhotos,
+    afterPhotos,
+    createdAt: report.created_at || "",
+    updatedAt: report.updated_at || "",
+  };
+};
 
 const buildSupabasePayload = ({ reportData, profile, user }) => ({
   company_id: profile.company_id,
@@ -131,6 +149,19 @@ const generateReportNumber = async (companyId) => {
   return `${prefix}-${String((count || 0) + 1).padStart(4, "0")}`;
 };
 
+const getFileExtension = (file) => {
+  const extensionFromName = file.name?.split(".").pop();
+
+  if (extensionFromName && extensionFromName.length <= 5) {
+    return extensionFromName.toLowerCase();
+  }
+
+  if (file.type === "image/png") return "png";
+  if (file.type === "image/webp") return "webp";
+
+  return "jpg";
+};
+
 const CreateReport = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -139,6 +170,7 @@ const CreateReport = () => {
   const isEditMode = Boolean(id);
 
   const [reportData, setReportData] = useState(createEmptyReport);
+  const [photoFiles, setPhotoFiles] = useState(createEmptyPhotoFiles);
   const [company, setCompany] = useState(null);
   const [loadingReport, setLoadingReport] = useState(true);
   const [savingReport, setSavingReport] = useState(false);
@@ -168,6 +200,7 @@ const CreateReport = () => {
 
       setLoadingReport(true);
       setMessage(null);
+      setPhotoFiles(createEmptyPhotoFiles());
 
       try {
         const { data: companyData, error: companyError } = await supabase
@@ -195,15 +228,24 @@ const CreateReport = () => {
             throw reportError;
           }
 
-          const localReport = getLocalReports().find(
-            (report) => report.id === id
-          );
+          const { data: existingPhotos, error: photosError } = await supabase
+            .from("report_photos")
+            .select("id, photo_type, photo_url, photo_order")
+            .eq("report_id", id)
+            .order("photo_order", { ascending: true });
 
-          setReportData({
-            ...mapSupabaseReportToForm(existingReport, companyData, displayName),
-            beforePhotos: localReport?.beforePhotos || [],
-            afterPhotos: localReport?.afterPhotos || [],
-          });
+          if (photosError) {
+            throw photosError;
+          }
+
+          setReportData(
+            mapSupabaseReportToForm(
+              existingReport,
+              companyData,
+              displayName,
+              existingPhotos || []
+            )
+          );
         } else {
           const reportNumber = await generateReportNumber(profile.company_id);
 
@@ -231,6 +273,114 @@ const CreateReport = () => {
 
     loadCompanyAndReport();
   }, [id, isEditMode, user, profile, profileLoading, displayName]);
+
+  const deleteRemovedSupabasePhotos = async (reportId, currentReportData) => {
+    const { data: savedPhotos, error } = await supabase
+      .from("report_photos")
+      .select("id, photo_type, photo_url")
+      .eq("report_id", reportId);
+
+    if (error) {
+      throw error;
+    }
+
+    const currentPhotoUrls = [
+      ...(currentReportData.beforePhotos || []),
+      ...(currentReportData.afterPhotos || []),
+    ].filter((photo) => typeof photo === "string" && photo.startsWith("http"));
+
+    const photosToDelete = (savedPhotos || []).filter(
+      (photo) => !currentPhotoUrls.includes(photo.photo_url)
+    );
+
+    if (photosToDelete.length === 0) return;
+
+    const { error: deleteError } = await supabase
+      .from("report_photos")
+      .delete()
+      .in(
+        "id",
+        photosToDelete.map((photo) => photo.id)
+      );
+
+    if (deleteError) {
+      throw deleteError;
+    }
+  };
+
+  const uploadPhotosToSupabase = async (reportId, currentReportData) => {
+    const uploadGroup = async (photoType, dbPhotoType) => {
+      const newPhotos = photoFiles[photoType] || [];
+
+      if (newPhotos.length === 0) {
+        return currentReportData[photoType] || [];
+      }
+
+      const uploadedUrls = [];
+
+      for (let index = 0; index < newPhotos.length; index += 1) {
+        const photo = newPhotos[index];
+        const extension = getFileExtension(photo.file);
+        const filePath = `${profile.company_id}/${reportId}/${dbPhotoType}-${Date.now()}-${index}.${extension}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from(REPORT_PHOTOS_BUCKET)
+          .upload(filePath, photo.file, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: photo.file.type || "image/jpeg",
+          });
+
+        if (uploadError) {
+          throw uploadError;
+        }
+
+        const { data: publicUrlData } = supabase.storage
+          .from(REPORT_PHOTOS_BUCKET)
+          .getPublicUrl(filePath);
+
+        const publicUrl = publicUrlData.publicUrl;
+
+        const photoOrder = (currentReportData[photoType] || []).length + index;
+
+        const { error: insertPhotoError } = await supabase
+          .from("report_photos")
+          .insert({
+            report_id: reportId,
+            company_id: profile.company_id,
+            photo_type: dbPhotoType,
+            photo_url: publicUrl,
+            photo_order: photoOrder,
+          });
+
+        if (insertPhotoError) {
+          throw insertPhotoError;
+        }
+
+        uploadedUrls.push({
+          previewUrl: photo.previewUrl,
+          publicUrl,
+        });
+      }
+
+      return (currentReportData[photoType] || []).map((photoUrl) => {
+        const uploadedPhoto = uploadedUrls.find(
+          (photo) => photo.previewUrl === photoUrl
+        );
+
+        return uploadedPhoto ? uploadedPhoto.publicUrl : photoUrl;
+      });
+    };
+
+    const beforePhotos = await uploadGroup("beforePhotos", "before");
+    const afterPhotos = await uploadGroup("afterPhotos", "after");
+
+    return {
+      ...currentReportData,
+      beforePhotos,
+      afterPhotos,
+    };
+  };
 
   const handleSaveReport = async () => {
     if (!canCreateReport) {
@@ -298,8 +448,15 @@ const CreateReport = () => {
         savedReport = data;
       }
 
+      await deleteRemovedSupabasePhotos(savedReport.id, reportData);
+
+      const reportWithUploadedPhotos = await uploadPhotosToSupabase(
+        savedReport.id,
+        reportData
+      );
+
       const finalReportData = {
-        ...reportData,
+        ...reportWithUploadedPhotos,
         id: savedReport.id,
         reportNumber: savedReport.report_number,
         businessName: company?.business_name || reportData.businessName,
@@ -313,13 +470,17 @@ const CreateReport = () => {
       };
 
       setReportData(finalReportData);
+      setPhotoFiles(createEmptyPhotoFiles());
       saveLocalReportCopy(finalReportData);
 
       setMessage({
         type: "success",
-        text: isEditMode
-          ? "Report updated successfully."
-          : "Report saved successfully.",
+        text:
+          photoFiles.beforePhotos.length > 0 || photoFiles.afterPhotos.length > 0
+            ? "Report and photos saved successfully."
+            : isEditMode
+            ? "Report updated successfully."
+            : "Report saved successfully.",
       });
 
       if (!isEditMode) {
@@ -362,6 +523,7 @@ const CreateReport = () => {
       jobDate: getTodayDate(),
     });
 
+    setPhotoFiles(createEmptyPhotoFiles());
     setMessage(null);
   };
 
@@ -455,7 +617,12 @@ const CreateReport = () => {
 
       <div className="row g-4">
         <div className="col-lg-7">
-          <ReportForm reportData={reportData} setReportData={setReportData} />
+          <ReportForm
+            reportData={reportData}
+            setReportData={setReportData}
+            photoFiles={photoFiles}
+            setPhotoFiles={setPhotoFiles}
+          />
         </div>
 
         <div className="col-lg-5">
