@@ -3,6 +3,21 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 
+const REPORT_STATUS_OPTIONS = [
+  {
+    value: "pending",
+    label: "Pending",
+  },
+  {
+    value: "checked",
+    label: "Checked",
+  },
+  {
+    value: "completed",
+    label: "Completed",
+  },
+];
+
 const formatDate = (dateValue) => {
   if (!dateValue) return "Not provided";
 
@@ -33,6 +48,22 @@ const formatCreatedAt = (dateValue) => {
     month: "short",
     year: "numeric",
   });
+};
+
+const getStatusLabel = (status) => {
+  if (status === "pending") return "Pending";
+  if (status === "checked") return "Checked";
+  if (status === "completed") return "Completed";
+
+  return "Pending";
+};
+
+const getStatusBadgeClass = (status) => {
+  if (status === "completed") return "bg-success";
+  if (status === "checked") return "bg-primary";
+  if (status === "pending") return "bg-warning text-dark";
+
+  return "bg-secondary";
 };
 
 const getTeamSummary = (teamInvolved = [], creatorName = "") => {
@@ -96,7 +127,7 @@ const mapReportRow = (report) => {
     jobDate: report.job_date || "",
     serviceType: report.service_type || "Not provided",
     totalHours: report.total_hours || "Not calculated",
-    status: report.status || "completed",
+    status: report.status || "pending",
     createdAt: report.created_at || "",
     createdBy: report.created_by || "",
     creatorName: creator?.full_name || "Unknown user",
@@ -110,27 +141,35 @@ const Reports = () => {
 
   const [reports, setReports] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [loadingReports, setLoadingReports] = useState(true);
+  const [updatingStatusId, setUpdatingStatusId] = useState(null);
   const [message, setMessage] = useState(null);
 
   const isWorker = profile?.role === "worker";
+  const canManageStatus =
+    profile?.role === "admin" || profile?.role === "supervisor";
 
   const filteredReports = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
 
-    if (!normalizedSearch) return reports;
-
     return reports.filter((report) => {
-      return (
+      const matchesSearch =
+        !normalizedSearch ||
         report.reportNumber.toLowerCase().includes(normalizedSearch) ||
         report.clientName.toLowerCase().includes(normalizedSearch) ||
         report.jobAddress.toLowerCase().includes(normalizedSearch) ||
         report.serviceType.toLowerCase().includes(normalizedSearch) ||
         report.creatorName.toLowerCase().includes(normalizedSearch) ||
-        report.teamSummary.toLowerCase().includes(normalizedSearch)
-      );
+        report.teamSummary.toLowerCase().includes(normalizedSearch) ||
+        getStatusLabel(report.status).toLowerCase().includes(normalizedSearch);
+
+      const matchesStatus =
+        statusFilter === "all" || report.status === statusFilter;
+
+      return matchesSearch && matchesStatus;
     });
-  }, [reports, searchTerm]);
+  }, [reports, searchTerm, statusFilter]);
 
   useEffect(() => {
     const loadReports = async () => {
@@ -208,6 +247,61 @@ const Reports = () => {
     loadReports();
   }, [user, profile, profileLoading]);
 
+  const handleUpdateStatus = async (reportId, nextStatus) => {
+    if (!canManageStatus) {
+      setMessage({
+        type: "warning",
+        text: "Only admins and supervisors can update report status.",
+      });
+      return;
+    }
+
+    setUpdatingStatusId(reportId);
+    setMessage(null);
+
+    try {
+      const { error } = await supabase
+        .from("reports")
+        .update({
+          status: nextStatus,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", reportId)
+        .eq("company_id", profile.company_id);
+
+      if (error) {
+        throw error;
+      }
+
+      setReports((currentReports) =>
+        currentReports.map((report) =>
+          report.id === reportId
+            ? {
+                ...report,
+                status: nextStatus,
+              }
+            : report
+        )
+      );
+
+      setMessage({
+        type: "success",
+        text: `Report status updated to ${getStatusLabel(nextStatus)}.`,
+      });
+    } catch (error) {
+      console.error("Error updating report status:", error);
+
+      setMessage({
+        type: "danger",
+        text:
+          error.message ||
+          "There was an error updating the report status. Please try again.",
+      });
+    } finally {
+      setUpdatingStatusId(null);
+    }
+  };
+
   const handleDeleteReport = async (reportId) => {
     if (isWorker) {
       setMessage({
@@ -258,6 +352,37 @@ const Reports = () => {
     if (!isWorker) return true;
 
     return report.createdBy === user?.id;
+  };
+
+  const renderStatusControl = (report) => {
+    if (!canManageStatus) {
+      return (
+        <span className={`badge ${getStatusBadgeClass(report.status)}`}>
+          {getStatusLabel(report.status)}
+        </span>
+      );
+    }
+
+    return (
+      <div className="reports-status-control">
+        <select
+          className={`form-select form-select-sm reports-status-select reports-status-${report.status}`}
+          value={report.status}
+          onChange={(event) => handleUpdateStatus(report.id, event.target.value)}
+          disabled={updatingStatusId === report.id}
+        >
+          {REPORT_STATUS_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+
+        {updatingStatusId === report.id && (
+          <small className="text-muted">Updating...</small>
+        )}
+      </div>
+    );
   };
 
   if (loadingReports || profileLoading) {
@@ -328,8 +453,8 @@ const Reports = () => {
 
       <div className="card shadow-sm border-0 mb-4">
         <div className="card-body p-3 p-md-4">
-          <div className="row g-3 align-items-center">
-            <div className="col-md-8">
+          <div className="row g-3 align-items-end">
+            <div className="col-md-7">
               <label htmlFor="reportSearch" className="form-label">
                 Search reports
               </label>
@@ -340,11 +465,29 @@ const Reports = () => {
                 className="form-control"
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Search by report number, client, address, service, creator or team..."
+                placeholder="Search by report number, client, address, service, creator, team or status..."
               />
             </div>
 
-            <div className="col-md-4">
+            <div className="col-md-3">
+              <label htmlFor="statusFilter" className="form-label">
+                Status filter
+              </label>
+
+              <select
+                id="statusFilter"
+                className="form-select"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+              >
+                <option value="all">All statuses</option>
+                <option value="pending">Pending</option>
+                <option value="checked">Checked</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
+
+            <div className="col-md-2">
               <div className="reports-count-box">
                 <span>Total reports</span>
                 <strong>{filteredReports.length}</strong>
@@ -358,16 +501,18 @@ const Reports = () => {
         <div className="card shadow-sm border-0">
           <div className="card-body p-4 p-md-5 text-center">
             <h2 className="h4 mb-3">
-              {searchTerm ? "No reports found" : "No reports yet"}
+              {searchTerm || statusFilter !== "all"
+                ? "No reports found"
+                : "No reports yet"}
             </h2>
 
             <p className="text-muted mb-4">
-              {searchTerm
-                ? "Try a different search term."
+              {searchTerm || statusFilter !== "all"
+                ? "Try a different search term or status filter."
                 : "Start by creating your first job report."}
             </p>
 
-            {!searchTerm && (
+            {!searchTerm && statusFilter === "all" && (
               <Link to="/create-report" className="btn btn-primary">
                 Create Report
               </Link>
@@ -390,8 +535,8 @@ const Reports = () => {
                     </p>
                   </div>
 
-                  <span className="badge bg-success text-capitalize align-self-start">
-                    {report.status}
+                  <span className={`badge ${getStatusBadgeClass(report.status)}`}>
+                    {getStatusLabel(report.status)}
                   </span>
                 </div>
 
@@ -404,6 +549,9 @@ const Reports = () => {
 
                   <span>Hours</span>
                   <strong>{report.totalHours}</strong>
+
+                  <span>Status</span>
+                  <strong>{renderStatusControl(report)}</strong>
                 </div>
 
                 <div className="d-flex gap-2 flex-wrap mt-3">
@@ -484,11 +632,7 @@ const Reports = () => {
 
                       <td>{report.totalHours}</td>
 
-                      <td>
-                        <span className="badge bg-success text-capitalize">
-                          {report.status}
-                        </span>
-                      </td>
+                      <td>{renderStatusControl(report)}</td>
 
                       <td>{formatCreatedAt(report.createdAt)}</td>
 

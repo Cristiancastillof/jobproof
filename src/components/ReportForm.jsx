@@ -8,6 +8,7 @@ const ReportForm = ({
   teamMembers = [],
   selectedWorkerIds = [],
   setSelectedWorkerIds,
+  statusOptions = [],
 }) => {
   const totalHours =
     reportData.totalHours ||
@@ -105,6 +106,10 @@ const ReportForm = ({
       }));
     }
   };
+
+  const selectedStatusHelper =
+    statusOptions.find((option) => option.value === reportData.status)?.helper ||
+    "Select the current workflow status for this job.";
 
   const renderTeamSelector = () => {
     if (!teamMembers || teamMembers.length === 0) {
@@ -382,6 +387,30 @@ const ReportForm = ({
               onChange={handleChange}
               placeholder="Example: End of lease cleaning"
             />
+          </div>
+
+          <div className="mt-3">
+            <label htmlFor="status" className="form-label">
+              Job status
+            </label>
+
+            <select
+              id="status"
+              name="status"
+              className="form-select"
+              value={reportData.status || "pending"}
+              onChange={handleChange}
+            >
+              {statusOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+
+            <small className="text-muted d-block mt-2">
+              {selectedStatusHelper}
+            </small>
           </div>
         </div>
 

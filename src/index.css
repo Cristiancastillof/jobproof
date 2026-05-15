@@ -2853,3 +2853,233 @@ body {
     display: none;
   }
 }
+/* Dashboard */
+
+.dashboard-hero {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 18px;
+  align-items: stretch;
+}
+
+.dashboard-user-card {
+  min-width: 220px;
+  display: grid;
+  gap: 4px;
+  padding: 18px;
+  border-radius: 22px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
+}
+
+.dashboard-user-card span {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.dashboard-user-card strong {
+  color: var(--jp-navy);
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.dashboard-user-card small {
+  color: var(--jp-blue);
+  font-weight: 900;
+}
+
+.dashboard-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.dashboard-stat-card {
+  display: grid;
+  gap: 7px;
+  padding: 20px;
+  border-radius: 22px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.05);
+}
+
+.dashboard-stat-card span {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.dashboard-stat-card strong {
+  color: var(--jp-navy);
+  font-size: 2.1rem;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.dashboard-stat-card small {
+  color: #64748b;
+  font-weight: 700;
+}
+
+.dashboard-panel {
+  border-radius: 24px;
+}
+
+.dashboard-empty-state {
+  padding: 28px;
+  border-radius: 20px;
+  background: #f8fafc;
+  border: 1px dashed rgba(15, 23, 42, 0.16);
+  text-align: center;
+}
+
+.dashboard-recent-list {
+  display: grid;
+  gap: 10px;
+}
+
+.dashboard-recent-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  border-radius: 18px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.dashboard-recent-item:hover {
+  transform: translateY(-1px);
+  background: #ffffff;
+  border-color: rgba(30, 64, 175, 0.25);
+}
+
+.dashboard-recent-item div {
+  display: grid;
+  gap: 3px;
+}
+
+.dashboard-recent-item strong {
+  color: var(--jp-navy);
+  font-weight: 900;
+}
+
+.dashboard-recent-item span,
+.dashboard-recent-item small {
+  color: #64748b;
+  font-weight: 700;
+}
+
+.dashboard-recent-item div:last-child {
+  text-align: right;
+}
+
+.dashboard-actions-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.dashboard-action-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  align-items: center;
+  padding: 20px;
+  border-radius: 24px;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.05);
+}
+
+.dashboard-action-card h2 {
+  margin-bottom: 4px;
+  color: var(--jp-navy);
+  font-size: 1.05rem;
+  font-weight: 900;
+}
+
+.dashboard-action-card p {
+  margin-bottom: 0;
+  color: #64748b;
+  font-size: 0.92rem;
+}
+
+@media (max-width: 991px) {
+  .dashboard-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-user-card {
+    min-width: 0;
+  }
+
+  .dashboard-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .dashboard-action-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 575px) {
+  .dashboard-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-recent-item {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-recent-item div:last-child {
+    text-align: left;
+  }
+}
+/* Report workflow status */
+
+.reports-status-control {
+  display: grid;
+  gap: 4px;
+  min-width: 130px;
+}
+
+.reports-status-select {
+  min-width: 130px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 900;
+  text-transform: capitalize;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+}
+
+.reports-status-pending {
+  background-color: #fef3c7;
+  color: #92400e;
+  border-color: #f59e0b;
+}
+
+.reports-status-checked {
+  background-color: rgba(30, 64, 175, 0.1);
+  color: var(--jp-blue);
+  border-color: rgba(30, 64, 175, 0.28);
+}
+
+.reports-status-completed {
+  background-color: #dcfce7;
+  color: #166534;
+  border-color: #22c55e;
+}

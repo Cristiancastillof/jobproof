@@ -38,6 +38,7 @@ const createEmptyReport = () => ({
   workCompleted: "",
   issuesFound: "",
   recommendations: "",
+  status: "pending",
   beforePhotos: [],
   afterPhotos: [],
   createdAt: "",
@@ -48,6 +49,41 @@ const createEmptyPhotoFiles = () => ({
   beforePhotos: [],
   afterPhotos: [],
 });
+
+const getStatusOptionsByRole = (role) => {
+  if (role === "admin" || role === "supervisor") {
+    return [
+      {
+        value: "pending",
+        label: "Pending",
+        helper: "Job created, still waiting for review or completion.",
+      },
+      {
+        value: "checked",
+        label: "Checked",
+        helper: "Job reviewed and ready to be closed.",
+      },
+      {
+        value: "completed",
+        label: "Completed",
+        helper: "Job finished and officially closed.",
+      },
+    ];
+  }
+
+  return [
+    {
+      value: "pending",
+      label: "Pending",
+      helper: "Job created, still waiting for review.",
+    },
+    {
+      value: "checked",
+      label: "Checked",
+      helper: "Job reviewed and ready for supervisor/admin completion.",
+    },
+  ];
+};
 
 const mapSupabaseReportToForm = ({
   report,
@@ -86,6 +122,7 @@ const mapSupabaseReportToForm = ({
     workCompleted: report.work_completed || "",
     issuesFound: report.issues_found || "",
     recommendations: report.recommendations || "",
+    status: report.status || "pending",
     beforePhotos,
     afterPhotos,
     createdAt: report.created_at || "",
@@ -109,7 +146,7 @@ const buildSupabasePayload = ({ reportData, profile, user }) => ({
   work_completed: reportData.workCompleted,
   issues_found: reportData.issuesFound,
   recommendations: reportData.recommendations,
-  status: "completed",
+  status: reportData.status || "pending",
   updated_at: new Date().toISOString(),
 });
 
@@ -203,6 +240,7 @@ const CreateReport = () => {
   const { user, profile, displayName, profileLoading } = useAuth();
 
   const isEditMode = Boolean(id);
+  const statusOptions = getStatusOptionsByRole(profile?.role);
 
   const [reportData, setReportData] = useState(createEmptyReport);
   const [photoFiles, setPhotoFiles] = useState(createEmptyPhotoFiles);
@@ -216,10 +254,6 @@ const CreateReport = () => {
   const canCreateReport = useMemo(() => {
     return Boolean(user?.id && profile?.company_id);
   }, [user, profile]);
-
-  const selectedTeamMembers = useMemo(() => {
-    return teamMembers.filter((member) => selectedWorkerIds.includes(member.id));
-  }, [teamMembers, selectedWorkerIds]);
 
   const normalizeSelectedWorkerIds = (workerIds = []) => {
     const uniqueIds = Array.from(new Set(workerIds.filter(Boolean)));
@@ -395,6 +429,7 @@ const CreateReport = () => {
             workerName: displayName || "",
             createdBy: user.id,
             teamInvolved: initialTeamInvolved,
+            status: "pending",
             jobDate: getTodayDate(),
           });
         }
@@ -652,6 +687,7 @@ const CreateReport = () => {
         reportData: {
           ...reportData,
           totalHours: finalTotalHours,
+          status: reportData.status || "pending",
         },
         profile,
         user,
@@ -682,6 +718,7 @@ const CreateReport = () => {
           .from("reports")
           .insert({
             ...payload,
+            status: reportData.status || "pending",
             created_at: new Date().toISOString(),
           })
           .select("*")
@@ -717,6 +754,7 @@ const CreateReport = () => {
         workerName: displayName || reportData.workerName,
         createdBy: savedReport.created_by,
         teamInvolved: savedTeamInvolved,
+        status: savedReport.status || "pending",
         totalHours: savedReport.total_hours || finalTotalHours,
         createdAt: savedReport.created_at,
         updatedAt: savedReport.updated_at,
@@ -733,10 +771,10 @@ const CreateReport = () => {
       setMessage({
         type: "success",
         text: hasNewPhotos
-          ? "Report, team and photos saved successfully."
+          ? "Report, status, team and photos saved successfully."
           : isEditMode
-          ? "Report and team updated successfully."
-          : "Report and team saved successfully.",
+          ? "Report, status and team updated successfully."
+          : "Report, status and team saved successfully.",
       });
 
       if (!isEditMode) {
@@ -795,6 +833,7 @@ const CreateReport = () => {
       workerName: displayName || "",
       createdBy: user.id,
       teamInvolved: initialTeamInvolved,
+      status: "pending",
       jobDate: getTodayDate(),
     });
 
@@ -926,6 +965,7 @@ const CreateReport = () => {
             teamMembers={teamMembers}
             selectedWorkerIds={selectedWorkerIds}
             setSelectedWorkerIds={setSelectedWorkerIds}
+            statusOptions={statusOptions}
           />
         </div>
 

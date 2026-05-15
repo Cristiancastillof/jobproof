@@ -3,86 +3,46 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 
-const formatDate = (dateValue) => {
-  if (!dateValue) return "Not specified";
-
-  const date = new Date(dateValue);
-
-  if (Number.isNaN(date.getTime())) {
-    return "Not specified";
-  }
-
-  return date.toLocaleDateString("en-AU", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+const getMonthStartIso = () => {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 };
 
-const getStartOfMonth = () => {
-  const date = new Date();
-  date.setDate(1);
-  date.setHours(0, 0, 0, 0);
-  return date;
-};
+const createInitialStats = () => ({
+  totalReports: 0,
+  reportsThisMonth: 0,
+  activeTeamMembers: 0,
+  activeWorkers: 0,
+  pendingInvitations: 0,
+  createdByMe: 0,
+  participatedReports: 0,
+});
 
-const getStartOfWeek = () => {
-  const date = new Date();
-  const day = date.getDay();
-  const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-
-  date.setDate(diff);
-  date.setHours(0, 0, 0, 0);
-
-  return date;
-};
-
-const isAfterDate = (dateValue, compareDate) => {
-  if (!dateValue) return false;
-
-  const date = new Date(dateValue);
-
-  if (Number.isNaN(date.getTime())) {
-    return false;
-  }
-
-  return date >= compareDate;
-};
-
-const getWelcomeCopy = (role) => {
+const getRoleCopy = (role) => {
   if (role === "admin") {
     return {
-      eyebrow: "Admin dashboard",
-      title: "Company command centre",
+      label: "Admin dashboard",
+      title: "Company command center",
       subtitle:
-        "Track reports, team activity and company setup from one professional workspace.",
+        "Manage reports, monitor your team and keep your business profile ready for professional job documentation.",
     };
   }
 
   if (role === "supervisor") {
     return {
-      eyebrow: "Supervisor dashboard",
+      label: "Supervisor dashboard",
       title: "Operational overview",
       subtitle:
-        "Monitor field reports, review recent activity and keep daily work moving.",
+        "Review company reports, create new job records and keep track of field activity.",
     };
   }
 
   return {
-    eyebrow: "Worker dashboard",
-    title: "My work hub",
+    label: "Worker dashboard",
+    title: "My job workspace",
     subtitle:
-      "Create reports quickly, review your recent work and keep your job records organised.",
+      "Create reports, review your own work and access jobs where you were included as part of the team.",
   };
-};
-
-const getStatusBadgeClass = (status) => {
-  if (status === "approved") return "bg-success";
-  if (status === "submitted") return "bg-primary";
-  if (status === "draft") return "bg-secondary";
-  if (status === "archived") return "bg-dark";
-
-  return "bg-info text-dark";
 };
 
 const StatCard = ({ label, value, helper }) => {
@@ -90,31 +50,31 @@ const StatCard = ({ label, value, helper }) => {
     <div className="dashboard-stat-card">
       <span>{label}</span>
       <strong>{value}</strong>
-      <small>{helper}</small>
+      {helper && <small>{helper}</small>}
     </div>
   );
 };
 
-const QuickAction = ({ to, title, description, variant = "primary" }) => {
+const QuickAction = ({ to, title, description, buttonLabel }) => {
   return (
-    <Link
-      to={to}
-      className={`dashboard-action-card dashboard-action-card-${variant}`}
-    >
-      <strong>{title}</strong>
-      <span>{description}</span>
-    </Link>
+    <div className="dashboard-action-card">
+      <div>
+        <h2>{title}</h2>
+        <p>{description}</p>
+      </div>
+
+      <Link to={to} className="btn btn-primary">
+        {buttonLabel}
+      </Link>
+    </div>
   );
 };
 
 const Dashboard = () => {
   const { user, profile, displayName, displayRole, profileLoading } = useAuth();
 
-  const [company, setCompany] = useState(null);
-  const [reports, setReports] = useState([]);
-  const [teamCount, setTeamCount] = useState(null);
-  const [pendingInvitesCount, setPendingInvitesCount] = useState(null);
-  const [photoCount, setPhotoCount] = useState(null);
+  const [stats, setStats] = useState(createInitialStats);
+  const [recentReports, setRecentReports] = useState([]);
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [message, setMessage] = useState(null);
 
@@ -123,26 +83,14 @@ const Dashboard = () => {
   const isSupervisor = role === "supervisor";
   const isWorker = role === "worker";
 
-  const welcomeCopy = getWelcomeCopy(role);
+  const roleCopy = useMemo(() => getRoleCopy(role), [role]);
 
   useEffect(() => {
     const loadDashboard = async () => {
       if (profileLoading) return;
 
-      if (!user?.id) {
+      if (!user?.id || !profile?.company_id) {
         setLoadingDashboard(false);
-        return;
-      }
-
-      if (!profile?.company_id) {
-        setLoadingDashboard(false);
-        setMessage({
-          type: "warning",
-          text:
-            role === "admin"
-              ? "Complete your Business Profile to activate your company dashboard."
-              : "Your account is not connected to a company yet. Please contact your admin.",
-        });
         return;
       }
 
@@ -150,98 +98,129 @@ const Dashboard = () => {
       setMessage(null);
 
       try {
-        const { data: companyData, error: companyError } = await supabase
-          .from("companies")
-          .select(
-            "id, business_name, business_email, business_phone, business_logo_url"
-          )
-          .eq("id", profile.company_id)
-          .single();
+        const monthStartIso = getMonthStartIso();
 
-        if (companyError) {
-          throw companyError;
-        }
+        const totalReportsQuery = supabase
+          .from("reports")
+          .select("id", { count: "exact", head: true })
+          .eq("company_id", profile.company_id);
 
-        setCompany(companyData);
+        const reportsThisMonthQuery = supabase
+          .from("reports")
+          .select("id", { count: "exact", head: true })
+          .eq("company_id", profile.company_id)
+          .gte("created_at", monthStartIso);
 
-        let reportsQuery = supabase
+        const recentReportsQuery = supabase
           .from("reports")
           .select(
             `
             id,
             report_number,
             client_name,
-            job_address,
-            job_date,
             service_type,
-            total_hours,
-            status,
-            created_at,
-            updated_at,
-            created_by,
-            profiles:created_by (
-              full_name,
-              email,
-              role
-            )
+            job_date,
+            created_at
           `
           )
           .eq("company_id", profile.company_id)
-          .order("created_at", { ascending: false });
+          .order("created_at", { ascending: false })
+          .limit(5);
 
-        if (role === "worker") {
-          reportsQuery = reportsQuery.eq("created_by", user.id);
-        }
+        const [
+          { count: totalReports, error: totalReportsError },
+          { count: reportsThisMonth, error: reportsThisMonthError },
+          { data: recentReportsData, error: recentReportsError },
+        ] = await Promise.all([
+          totalReportsQuery,
+          reportsThisMonthQuery,
+          recentReportsQuery,
+        ]);
 
-        const { data: reportsData, error: reportsError } = await reportsQuery;
+        if (totalReportsError) throw totalReportsError;
+        if (reportsThisMonthError) throw reportsThisMonthError;
+        if (recentReportsError) throw recentReportsError;
 
-        if (reportsError) {
-          throw reportsError;
-        }
-
-        setReports(reportsData || []);
+        let activeTeamMembers = 0;
+        let activeWorkers = 0;
+        let pendingInvitations = 0;
+        let createdByMe = 0;
+        let participatedReports = 0;
 
         if (isAdmin || isSupervisor) {
-          const { count, error: teamError } = await supabase
-            .from("profiles")
-            .select("id", { count: "exact", head: true })
-            .eq("company_id", profile.company_id)
-            .eq("active", true);
+          const [
+            { count: activeTeamCount, error: activeTeamError },
+            { count: activeWorkersCount, error: activeWorkersError },
+          ] = await Promise.all([
+            supabase
+              .from("profiles")
+              .select("id", { count: "exact", head: true })
+              .eq("company_id", profile.company_id)
+              .eq("active", true),
 
-          if (teamError) {
-            console.error("Error loading team count:", teamError);
-            setTeamCount(null);
-          } else {
-            setTeamCount(count || 0);
-          }
+            supabase
+              .from("profiles")
+              .select("id", { count: "exact", head: true })
+              .eq("company_id", profile.company_id)
+              .eq("active", true)
+              .eq("role", "worker"),
+          ]);
+
+          if (activeTeamError) throw activeTeamError;
+          if (activeWorkersError) throw activeWorkersError;
+
+          activeTeamMembers = activeTeamCount || 0;
+          activeWorkers = activeWorkersCount || 0;
         }
 
         if (isAdmin) {
-          const { count, error: invitesError } = await supabase
+          const { count, error } = await supabase
             .from("team_invitations")
             .select("id", { count: "exact", head: true })
             .eq("company_id", profile.company_id)
             .eq("status", "pending");
 
-          if (invitesError) {
-            console.error("Error loading pending invitations:", invitesError);
-            setPendingInvitesCount(null);
-          } else {
-            setPendingInvitesCount(count || 0);
-          }
+          if (error) throw error;
+
+          pendingInvitations = count || 0;
         }
 
-        const { count: photosTotal, error: photosError } = await supabase
-          .from("report_photos")
-          .select("id", { count: "exact", head: true })
-          .eq("company_id", profile.company_id);
+        if (isWorker) {
+          const [
+            { count: createdCount, error: createdError },
+            { count: participatedCount, error: participatedError },
+          ] = await Promise.all([
+            supabase
+              .from("reports")
+              .select("id", { count: "exact", head: true })
+              .eq("company_id", profile.company_id)
+              .eq("created_by", user.id),
 
-        if (photosError) {
-          console.error("Error loading photo count:", photosError);
-          setPhotoCount(null);
-        } else {
-          setPhotoCount(photosTotal || 0);
+            supabase
+              .from("report_workers")
+              .select("id", { count: "exact", head: true })
+              .eq("company_id", profile.company_id)
+              .eq("profile_id", user.id),
+          ]);
+
+          if (createdError) throw createdError;
+          if (participatedError) throw participatedError;
+
+          createdByMe = createdCount || 0;
+          participatedReports = participatedCount || 0;
         }
+
+        setStats({
+          totalReports: totalReports || 0,
+          reportsThisMonth: reportsThisMonth || 0,
+          activeTeamMembers,
+          activeWorkers,
+          pendingInvitations,
+          createdByMe,
+          participatedReports,
+        });
+
+        setRecentReports(recentReportsData || []);
       } catch (error) {
         console.error("Error loading dashboard:", error);
 
@@ -255,109 +234,25 @@ const Dashboard = () => {
     };
 
     loadDashboard();
-  }, [user, profile, profileLoading, role, isAdmin, isSupervisor]);
+  }, [user, profile, profileLoading, isAdmin, isSupervisor, isWorker]);
 
-  const dashboardStats = useMemo(() => {
-    const startOfMonth = getStartOfMonth();
-    const startOfWeek = getStartOfWeek();
+  const formatDate = (dateValue) => {
+    if (!dateValue) return "Not provided";
 
-    const reportsThisMonth = reports.filter((report) =>
-      isAfterDate(report.created_at, startOfMonth)
-    ).length;
+    const date = new Date(`${dateValue}T00:00:00`);
 
-    const reportsThisWeek = reports.filter((report) =>
-      isAfterDate(report.created_at, startOfWeek)
-    ).length;
-
-    const myReports = reports.filter(
-      (report) => report.created_by === user?.id
-    ).length;
-
-    if (isAdmin) {
-      return [
-        {
-          label: "Total reports",
-          value: reports.length,
-          helper: "All company reports",
-        },
-        {
-          label: "This month",
-          value: reportsThisMonth,
-          helper: "Reports created this month",
-        },
-        {
-          label: "Team members",
-          value: teamCount ?? "—",
-          helper: "Active company users",
-        },
-        {
-          label: "Pending invites",
-          value: pendingInvitesCount ?? "—",
-          helper: "Team links waiting to be accepted",
-        },
-      ];
+    if (Number.isNaN(date.getTime())) {
+      return dateValue;
     }
 
-    if (isSupervisor) {
-      return [
-        {
-          label: "Company reports",
-          value: reports.length,
-          helper: "Reports you can review",
-        },
-        {
-          label: "This week",
-          value: reportsThisWeek,
-          helper: "Recent field activity",
-        },
-        {
-          label: "Team members",
-          value: teamCount ?? "—",
-          helper: "Active company users",
-        },
-        {
-          label: "Photos uploaded",
-          value: photoCount ?? "—",
-          helper: "Evidence attached to reports",
-        },
-      ];
-    }
+    return date.toLocaleDateString("en-AU", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
 
-    return [
-      {
-        label: "My reports",
-        value: myReports,
-        helper: "Reports created by you",
-      },
-      {
-        label: "This week",
-        value: reportsThisWeek,
-        helper: "Your recent activity",
-      },
-      {
-        label: "Photos uploaded",
-        value: photoCount ?? "—",
-        helper: "Evidence in your accessible reports",
-      },
-      {
-        label: "Last report",
-        value: reports[0]?.report_number || "—",
-        helper: "Most recent saved report",
-      },
-    ];
-  }, [
-    reports,
-    user,
-    teamCount,
-    pendingInvitesCount,
-    photoCount,
-    isAdmin,
-    isSupervisor,
-  ]);
-
-  const recentReports = reports.slice(0, 5);
-
-  if (profileLoading || loadingDashboard) {
+  if (loadingDashboard || profileLoading) {
     return (
       <section className="py-5 text-center">
         <div className="spinner-border text-primary mb-3" role="status">
@@ -375,29 +270,21 @@ const Dashboard = () => {
 
   if (!profile?.company_id) {
     return (
-      <section className="dashboard-page">
-        <div className="dashboard-hero-card">
-          <div>
-            <p className="eyebrow mb-2">Workspace setup</p>
+      <section className="py-5">
+        <div className="card shadow-sm border-0">
+          <div className="card-body p-4 p-md-5 text-center">
+            <p className="eyebrow mb-2">Welcome to JobProof</p>
 
-            <h1 className="dashboard-title mb-3">
-              {isAdmin ? "Complete your company setup" : "Company access needed"}
-            </h1>
+            <h1 className="h3 mb-3">Complete your Business Profile</h1>
 
-            <p className="dashboard-subtitle mb-4">
-              {message?.text ||
-                "Your account needs to be connected to a company before using the dashboard."}
+            <p className="text-muted mb-4">
+              Before creating reports, set up your company details. JobProof
+              will use this information automatically in every report and PDF.
             </p>
 
-            {isAdmin ? (
-              <Link to="/business-profile" className="btn btn-primary">
-                Complete Business Profile
-              </Link>
-            ) : (
-              <Link to="/reports" className="btn btn-outline-primary">
-                Back to Reports
-              </Link>
-            )}
+            <Link to="/business-profile" className="btn btn-primary">
+              Complete Business Profile
+            </Link>
           </div>
         </div>
       </section>
@@ -405,66 +292,110 @@ const Dashboard = () => {
   }
 
   return (
-    <section className="dashboard-page">
+    <section>
+      <div className="dashboard-hero mb-4">
+        <div>
+          <p className="eyebrow mb-2">{roleCopy.label}</p>
+
+          <h1 className="section-title mb-2">{roleCopy.title}</h1>
+
+          <p className="section-subtitle mb-0">{roleCopy.subtitle}</p>
+        </div>
+
+        <div className="dashboard-user-card">
+          <span>Signed in as</span>
+          <strong>{displayName}</strong>
+          <small>{displayRole}</small>
+        </div>
+      </div>
+
       {message && (
         <div className={`alert alert-${message.type}`} role="alert">
           {message.text}
         </div>
       )}
 
-      <div className="dashboard-hero-card mb-4">
-        <div className="dashboard-hero-content">
-          <p className="eyebrow mb-2">{welcomeCopy.eyebrow}</p>
-
-          <h1 className="dashboard-title mb-2">
-            Welcome back, {displayName}
-          </h1>
-
-          <p className="dashboard-subtitle mb-0">{welcomeCopy.subtitle}</p>
-        </div>
-
-        <div className="dashboard-profile-card">
-          <div className="dashboard-avatar">
-            {company?.business_logo_url ? (
-              <img src={company.business_logo_url} alt="Company logo" />
-            ) : (
-              <span>{displayName?.charAt(0)?.toUpperCase() || "J"}</span>
-            )}
-          </div>
-
-          <div>
-            <strong>{displayName}</strong>
-            <span>{displayRole}</span>
-            <small>{company?.business_name || "JobProof company"}</small>
-          </div>
-        </div>
-      </div>
-
-      <div className="dashboard-stat-grid mb-4">
-        {dashboardStats.map((stat) => (
+      {isAdmin && (
+        <div className="dashboard-stats-grid mb-4">
           <StatCard
-            key={stat.label}
-            label={stat.label}
-            value={stat.value}
-            helper={stat.helper}
+            label="Total reports"
+            value={stats.totalReports}
+            helper="All company reports"
           />
-        ))}
-      </div>
+
+          <StatCard
+            label="Active team members"
+            value={stats.activeTeamMembers}
+            helper="Admins, supervisors and workers"
+          />
+
+          <StatCard
+            label="Pending invitations"
+            value={stats.pendingInvitations}
+            helper="Invite links waiting"
+          />
+
+          <StatCard
+            label="Reports this month"
+            value={stats.reportsThisMonth}
+            helper="Current month activity"
+          />
+        </div>
+      )}
+
+      {isSupervisor && (
+        <div className="dashboard-stats-grid mb-4">
+          <StatCard
+            label="Company reports"
+            value={stats.totalReports}
+            helper="Reports visible to you"
+          />
+
+          <StatCard
+            label="Active workers"
+            value={stats.activeWorkers}
+            helper="Workers in your company"
+          />
+
+          <StatCard
+            label="Reports this month"
+            value={stats.reportsThisMonth}
+            helper="Current month activity"
+          />
+        </div>
+      )}
+
+      {isWorker && (
+        <div className="dashboard-stats-grid mb-4">
+          <StatCard
+            label="Visible reports"
+            value={stats.totalReports}
+            helper="Created by you or jobs where you participated"
+          />
+
+          <StatCard
+            label="Created by me"
+            value={stats.createdByMe}
+            helper="Reports you created"
+          />
+
+          <StatCard
+            label="Participated jobs"
+            value={stats.participatedReports}
+            helper="Jobs where you were included"
+          />
+        </div>
+      )}
 
       <div className="row g-4">
-        <div className="col-lg-8">
-          <div className="card shadow-sm border-0 dashboard-card">
+        <div className="col-lg-7">
+          <div className="card shadow-sm border-0 dashboard-panel h-100">
             <div className="card-body p-4">
               <div className="d-flex justify-content-between align-items-start gap-3 mb-3">
                 <div>
-                  <h2 className="h4 mb-1">
-                    {isWorker ? "My recent reports" : "Recent reports"}
-                  </h2>
-
+                  <h2 className="h4 mb-1">Recent reports</h2>
                   <p className="text-muted mb-0">
-                    {isWorker
-                      ? "Your latest reports saved in JobProof."
-                      : "Latest job reports across your workspace."}
+                    Latest reports available in your workspace.
                   </p>
                 </div>
 
@@ -475,45 +406,29 @@ const Dashboard = () => {
 
               {recentReports.length === 0 ? (
                 <div className="dashboard-empty-state">
-                  <h3 className="h5 mb-2">No reports yet</h3>
-                  <p className="text-muted mb-3">
-                    Start by creating your first job report.
-                  </p>
+                  <p className="text-muted mb-3">No reports yet.</p>
+
                   <Link to="/create-report" className="btn btn-primary">
-                    Create Report
+                    Create first report
                   </Link>
                 </div>
               ) : (
-                <div className="dashboard-report-list">
+                <div className="dashboard-recent-list">
                   {recentReports.map((report) => (
                     <Link
                       to={`/reports/${report.id}`}
-                      className="dashboard-report-item"
+                      className="dashboard-recent-item"
                       key={report.id}
                     >
                       <div>
-                        <strong>
-                          {report.report_number || "No report number"}
-                        </strong>
-
-                        <span>
-                          {report.client_name || "No client"} ·{" "}
-                          {report.service_type || "No service"}
-                        </span>
-
-                        <small>
-                          {report.profiles?.full_name || "Unknown worker"} ·{" "}
-                          {formatDate(report.created_at)}
-                        </small>
+                        <strong>{report.report_number || "No number"}</strong>
+                        <span>{report.client_name || "Not provided"}</span>
                       </div>
 
-                      <span
-                        className={`badge ${getStatusBadgeClass(
-                          report.status
-                        )}`}
-                      >
-                        {report.status || "completed"}
-                      </span>
+                      <div>
+                        <small>{report.service_type || "No service"}</small>
+                        <small>{formatDate(report.job_date)}</small>
+                      </div>
                     </Link>
                   ))}
                 </div>
@@ -522,97 +437,48 @@ const Dashboard = () => {
           </div>
         </div>
 
-        <div className="col-lg-4">
-          <div className="card shadow-sm border-0 dashboard-card mb-4">
-            <div className="card-body p-4">
-              <h2 className="h4 mb-3">Quick actions</h2>
+        <div className="col-lg-5">
+          <div className="dashboard-actions-grid">
+            <QuickAction
+              to="/create-report"
+              title="Create Report"
+              description="Start a new professional job report with photos, notes and team involved."
+              buttonLabel="Create"
+            />
 
-              <div className="dashboard-action-grid">
+            <QuickAction
+              to="/reports"
+              title="Reports"
+              description="Review saved reports, open details, download PDFs and manage report records."
+              buttonLabel="Open"
+            />
+
+            {isAdmin && (
+              <>
                 <QuickAction
-                  to="/create-report"
-                  title="Create Report"
-                  description="Start a new job report"
-                  variant="primary"
+                  to="/team"
+                  title="Team"
+                  description="Invite workers and supervisors, manage active members and pending links."
+                  buttonLabel="Manage"
                 />
 
                 <QuickAction
-                  to="/reports"
-                  title={isWorker ? "My Reports" : "View Reports"}
-                  description={
-                    isWorker
-                      ? "Review your saved work"
-                      : "Search company reports"
-                  }
-                  variant="light"
+                  to="/business-profile"
+                  title="Business Profile"
+                  description="Update your company details, logo, email and phone used in reports."
+                  buttonLabel="Update"
                 />
+              </>
+            )}
 
-                {isAdmin && (
-                  <>
-                    <QuickAction
-                      to="/team"
-                      title="Manage Team"
-                      description="Invite supervisors and workers"
-                      variant="light"
-                    />
-
-                    <QuickAction
-                      to="/business-profile"
-                      title="Business Profile"
-                      description="Update company details"
-                      variant="light"
-                    />
-                  </>
-                )}
-
-                {isSupervisor && (
-                  <QuickAction
-                    to="/reports"
-                    title="Review Work"
-                    description="Check recent activity"
-                    variant="light"
-                  />
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="card shadow-sm border-0 dashboard-card">
-            <div className="card-body p-4">
-              <h2 className="h5 mb-3">
-                {isAdmin
-                  ? "Admin workspace"
-                  : isSupervisor
-                  ? "Supervisor workspace"
-                  : "Worker workspace"}
-              </h2>
-
-              <ul className="dashboard-role-list">
-                {isAdmin && (
-                  <>
-                    <li>Manage company profile and branding.</li>
-                    <li>Invite supervisors and workers.</li>
-                    <li>View all company reports.</li>
-                    <li>Track team and evidence activity.</li>
-                  </>
-                )}
-
-                {isSupervisor && (
-                  <>
-                    <li>View company reports.</li>
-                    <li>Review recent field activity.</li>
-                    <li>Create and update operational reports.</li>
-                  </>
-                )}
-
-                {isWorker && (
-                  <>
-                    <li>Create reports quickly from the field.</li>
-                    <li>Access your own report history.</li>
-                    <li>Attach before and after evidence.</li>
-                  </>
-                )}
-              </ul>
-            </div>
+            {isSupervisor && (
+              <QuickAction
+                to="/reports"
+                title="Company activity"
+                description="Review operational reports created across your company workspace."
+                buttonLabel="Review"
+              />
+            )}
           </div>
         </div>
       </div>
