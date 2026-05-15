@@ -42,6 +42,22 @@ const getRoleLabel = (roleOnJob, role) => {
   return "Worker";
 };
 
+const getStatusLabel = (status) => {
+  if (status === "pending") return "Pending";
+  if (status === "checked") return "Checked";
+  if (status === "completed") return "Completed";
+
+  return "Pending";
+};
+
+const getStatusClass = (status) => {
+  if (status === "completed") return "report-status-badge completed";
+  if (status === "checked") return "report-status-badge checked";
+  if (status === "pending") return "report-status-badge pending";
+
+  return "report-status-badge";
+};
+
 const ReportPreview = ({ reportData }) => {
   const beforePhotos = reportData.beforePhotos || [];
   const afterPhotos = reportData.afterPhotos || [];
@@ -54,7 +70,13 @@ const ReportPreview = ({ reportData }) => {
       <div className="report-preview-card">
         <div className="report-preview-header">
           <div>
-            <p className="report-preview-eyebrow">Job Report</p>
+            <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
+              <p className="report-preview-eyebrow mb-0">Job Report</p>
+
+              <span className={getStatusClass(reportData.status)}>
+                {getStatusLabel(reportData.status)}
+              </span>
+            </div>
 
             <h2>{reportData.reportNumber || "Draft report"}</h2>
 
@@ -102,6 +124,11 @@ const ReportPreview = ({ reportData }) => {
           <h3>Client and job details</h3>
 
           <div className="report-preview-grid">
+            <div>
+              <span>Status</span>
+              <strong>{getStatusLabel(reportData.status)}</strong>
+            </div>
+
             <div>
               <span>Client</span>
               <strong>{reportData.clientName || "Not provided"}</strong>
@@ -167,9 +194,7 @@ const ReportPreview = ({ reportData }) => {
 
                   <span className="report-team-copy">
                     <strong>{member.fullName || "Unnamed user"}</strong>
-                    <small>
-                      {getRoleLabel(member.roleOnJob, member.role)}
-                    </small>
+                    <small>{getRoleLabel(member.roleOnJob, member.role)}</small>
                   </span>
                 </div>
               ))}
@@ -236,9 +261,7 @@ const ReportPreview = ({ reportData }) => {
           </div>
         </div>
 
-        <div className="report-preview-footer">
-          Generated with JobProof
-        </div>
+        <div className="report-preview-footer">Generated with JobProof</div>
       </div>
     </div>
   );

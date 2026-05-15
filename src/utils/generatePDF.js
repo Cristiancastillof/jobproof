@@ -13,6 +13,11 @@ const BRAND = {
   border: [226, 232, 240],
   muted: [100, 116, 139],
   white: [255, 255, 255],
+  green: [22, 101, 52],
+  greenBg: [220, 252, 231],
+  yellow: [146, 64, 14],
+  yellowBg: [254, 243, 199],
+  blueBg: [219, 234, 254],
 };
 
 const formatDate = (dateValue) => {
@@ -36,6 +41,37 @@ const formatValue = (value, fallback = "Not provided") => {
   return String(value);
 };
 
+const getStatusLabel = (status) => {
+  if (status === "pending") return "Pending";
+  if (status === "checked") return "Checked";
+  if (status === "completed") return "Completed";
+  return "Pending";
+};
+
+const getStatusStyle = (status) => {
+  if (status === "completed") {
+    return {
+      bg: BRAND.greenBg,
+      text: BRAND.green,
+      border: [34, 197, 94],
+    };
+  }
+
+  if (status === "checked") {
+    return {
+      bg: BRAND.blueBg,
+      text: BRAND.blue,
+      border: [30, 64, 175],
+    };
+  }
+
+  return {
+    bg: BRAND.yellowBg,
+    text: BRAND.yellow,
+    border: BRAND.amber,
+  };
+};
+
 const getRoleLabel = (roleOnJob, role) => {
   if (roleOnJob === "lead") return "Lead";
   if (roleOnJob === "supervisor") return "Supervisor";
@@ -45,17 +81,6 @@ const getRoleLabel = (roleOnJob, role) => {
   if (role === "supervisor") return "Supervisor";
 
   return "Worker";
-};
-
-const getInitials = (name) => {
-  if (!name) return "U";
-
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part.charAt(0).toUpperCase())
-    .join("");
 };
 
 const loadImage = (src) => {
@@ -68,13 +93,8 @@ const loadImage = (src) => {
     const image = new Image();
     image.crossOrigin = "anonymous";
 
-    image.onload = () => {
-      resolve(image);
-    };
-
-    image.onerror = () => {
-      resolve(null);
-    };
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
 
     image.src = src;
   });
@@ -98,12 +118,9 @@ const addFooter = (doc, pageNumber) => {
   doc.setTextColor(...BRAND.muted);
   doc.text("Generated with JobProof", MARGIN, PAGE_HEIGHT - 8);
 
-  doc.text(
-    `Page ${pageNumber}`,
-    PAGE_WIDTH - MARGIN,
-    PAGE_HEIGHT - 8,
-    { align: "right" }
-  );
+  doc.text(`Page ${pageNumber}`, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - 8, {
+    align: "right",
+  });
 };
 
 const addPageIfNeeded = (doc, currentY, requiredSpace = 30) => {
@@ -132,9 +149,29 @@ const addSectionTitle = (doc, title, y) => {
   return nextY + 10;
 };
 
+const addStatusBadge = (doc, reportData, x, y) => {
+  const status = reportData.status || "pending";
+  const label = getStatusLabel(status);
+  const style = getStatusStyle(status);
+
+  const badgeWidth = Math.max(36, doc.getTextWidth(label) + 18);
+  const badgeHeight = 8;
+
+  doc.setFillColor(...style.bg);
+  doc.setDrawColor(...style.border);
+  doc.roundedRect(x, y, badgeWidth, badgeHeight, 4, 4, "FD");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(...style.text);
+  doc.text(label, x + badgeWidth / 2, y + 5.4, { align: "center" });
+
+  return badgeWidth;
+};
+
 const addHeader = async (doc, reportData) => {
   doc.setFillColor(...BRAND.navy);
-  doc.rect(0, 0, PAGE_WIDTH, 38, "F");
+  doc.rect(0, 0, PAGE_WIDTH, 42, "F");
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
@@ -145,12 +182,19 @@ const addHeader = async (doc, reportData) => {
   doc.setTextColor(...BRAND.white);
   doc.text(formatValue(reportData.reportNumber, "Draft report"), MARGIN, 25);
 
+  const badgeX = MARGIN;
+  const badgeY = 30;
+  const badgeWidth = addStatusBadge(doc, reportData, badgeX, badgeY);
+
+  const companyX = badgeX + badgeWidth + 6;
+
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
+  doc.setTextColor(...BRAND.white);
   doc.text(
     formatValue(reportData.businessName, "Business name not set"),
-    MARGIN,
-    32
+    companyX,
+    35.4
   );
 
   const logo = await loadImage(reportData.businessLogo);
@@ -160,9 +204,12 @@ const addHeader = async (doc, reportData) => {
     doc.setFillColor(...BRAND.white);
     doc.roundedRect(PAGE_WIDTH - MARGIN - 28, 7, 28, 28, 3, 3, "F");
 
+    const imageFormat =
+      reportData.businessLogo?.startsWith("data:image/png") ? "PNG" : "JPEG";
+
     doc.addImage(
       logo,
-      "JPEG",
+      imageFormat,
       PAGE_WIDTH - MARGIN - 26 + (24 - dimensions.width) / 2,
       9 + (24 - dimensions.height) / 2,
       dimensions.width,
@@ -170,7 +217,7 @@ const addHeader = async (doc, reportData) => {
     );
   }
 
-  return 50;
+  return 54;
 };
 
 const addInfoTable = (doc, title, rows, y) => {
@@ -370,11 +417,17 @@ const addPhotosSection = async (doc, title, photos, y) => {
     doc.roundedRect(x, currentY, imageWidth, imageHeight, 3, 3, "FD");
 
     if (image) {
-      const dimensions = getImageDimensions(image, imageWidth - 6, imageHeight - 12);
+      const dimensions = getImageDimensions(
+        image,
+        imageWidth - 6,
+        imageHeight - 12
+      );
+
+      const format = photos[index]?.startsWith("data:image/png") ? "PNG" : "JPEG";
 
       doc.addImage(
         image,
-        "JPEG",
+        format,
         x + (imageWidth - dimensions.width) / 2,
         currentY + 5,
         dimensions.width,
@@ -392,7 +445,11 @@ const addPhotosSection = async (doc, title, photos, y) => {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     doc.setTextColor(...BRAND.navy);
-    doc.text(`${title.replace(" photos", "")} photo ${index + 1}`, x + 4, currentY + imageHeight - 4);
+    doc.text(
+      `${title.replace(" photos", "")} photo ${index + 1}`,
+      x + 4,
+      currentY + imageHeight - 4
+    );
 
     if (!isLeft || index === photos.length - 1) {
       currentY += imageHeight + 10;
@@ -425,6 +482,7 @@ export const generatePDF = async (reportData) => {
     doc,
     "Client and job details",
     [
+      ["Status", getStatusLabel(reportData.status)],
       ["Client", formatValue(reportData.clientName)],
       ["Job address", formatValue(reportData.jobAddress)],
       ["Job date", formatDate(reportData.jobDate)],
@@ -437,7 +495,6 @@ export const generatePDF = async (reportData) => {
   );
 
   currentY = addTeamInvolved(doc, reportData, currentY);
-
   currentY = addNotes(doc, reportData, currentY);
 
   currentY = await addPhotosSection(

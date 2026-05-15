@@ -11,6 +11,9 @@ const getMonthStartIso = () => {
 const createInitialStats = () => ({
   totalReports: 0,
   reportsThisMonth: 0,
+  pendingReports: 0,
+  checkedReports: 0,
+  completedReports: 0,
   activeTeamMembers: 0,
   activeWorkers: 0,
   pendingInvitations: 0,
@@ -24,7 +27,7 @@ const getRoleCopy = (role) => {
       label: "Admin dashboard",
       title: "Company command center",
       subtitle:
-        "Manage reports, monitor your team and keep your business profile ready for professional job documentation.",
+        "Manage reports, monitor workflow status and keep your team ready for professional job documentation.",
     };
   }
 
@@ -33,7 +36,7 @@ const getRoleCopy = (role) => {
       label: "Supervisor dashboard",
       title: "Operational overview",
       subtitle:
-        "Review company reports, create new job records and keep track of field activity.",
+        "Review company reports, track job status and keep field activity moving.",
     };
   }
 
@@ -45,9 +48,25 @@ const getRoleCopy = (role) => {
   };
 };
 
-const StatCard = ({ label, value, helper }) => {
+const getStatusBadgeClass = (status) => {
+  if (status === "completed") return "dashboard-status-pill completed";
+  if (status === "checked") return "dashboard-status-pill checked";
+  if (status === "pending") return "dashboard-status-pill pending";
+
+  return "dashboard-status-pill";
+};
+
+const getStatusLabel = (status) => {
+  if (status === "completed") return "Completed";
+  if (status === "checked") return "Checked";
+  if (status === "pending") return "Pending";
+
+  return "Pending";
+};
+
+const StatCard = ({ label, value, helper, variant = "default" }) => {
   return (
-    <div className="dashboard-stat-card">
+    <div className={`dashboard-stat-card dashboard-stat-${variant}`}>
       <span>{label}</span>
       <strong>{value}</strong>
       {helper && <small>{helper}</small>}
@@ -85,6 +104,37 @@ const Dashboard = () => {
 
   const roleCopy = useMemo(() => getRoleCopy(role), [role]);
 
+  const formatDate = (dateValue) => {
+    if (!dateValue) return "Not provided";
+
+    const date = new Date(`${dateValue}T00:00:00`);
+
+    if (Number.isNaN(date.getTime())) {
+      return dateValue;
+    }
+
+    return date.toLocaleDateString("en-AU", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  const mapReportsForStats = (reportsList = []) => {
+    return {
+      totalReports: reportsList.length,
+      pendingReports: reportsList.filter(
+        (report) => (report.status || "pending") === "pending"
+      ).length,
+      checkedReports: reportsList.filter(
+        (report) => (report.status || "pending") === "checked"
+      ).length,
+      completedReports: reportsList.filter(
+        (report) => (report.status || "pending") === "completed"
+      ).length,
+    };
+  };
+
   useEffect(() => {
     const loadDashboard = async () => {
       if (profileLoading) return;
@@ -100,46 +150,24 @@ const Dashboard = () => {
       try {
         const monthStartIso = getMonthStartIso();
 
-        const totalReportsQuery = supabase
-          .from("reports")
-          .select("id", { count: "exact", head: true })
-          .eq("company_id", profile.company_id);
+        const { data: visibleReportsData, error: visibleReportsError } =
+          await supabase
+            .from("reports")
+            .select("id, report_number, client_name, service_type, job_date, created_at, status, created_by")
+            .eq("company_id", profile.company_id)
+            .order("created_at", { ascending: false });
 
-        const reportsThisMonthQuery = supabase
-          .from("reports")
-          .select("id", { count: "exact", head: true })
-          .eq("company_id", profile.company_id)
-          .gte("created_at", monthStartIso);
+        if (visibleReportsError) {
+          throw visibleReportsError;
+        }
 
-        const recentReportsQuery = supabase
-          .from("reports")
-          .select(
-            `
-            id,
-            report_number,
-            client_name,
-            service_type,
-            job_date,
-            created_at
-          `
-          )
-          .eq("company_id", profile.company_id)
-          .order("created_at", { ascending: false })
-          .limit(5);
+        const visibleReports = visibleReportsData || [];
+        const workflowStats = mapReportsForStats(visibleReports);
 
-        const [
-          { count: totalReports, error: totalReportsError },
-          { count: reportsThisMonth, error: reportsThisMonthError },
-          { data: recentReportsData, error: recentReportsError },
-        ] = await Promise.all([
-          totalReportsQuery,
-          reportsThisMonthQuery,
-          recentReportsQuery,
-        ]);
-
-        if (totalReportsError) throw totalReportsError;
-        if (reportsThisMonthError) throw reportsThisMonthError;
-        if (recentReportsError) throw recentReportsError;
+        const reportsThisMonth = visibleReports.filter((report) => {
+          if (!report.created_at) return false;
+          return new Date(report.created_at) >= new Date(monthStartIso);
+        }).length;
 
         let activeTeamMembers = 0;
         let activeWorkers = 0;
@@ -211,8 +239,11 @@ const Dashboard = () => {
         }
 
         setStats({
-          totalReports: totalReports || 0,
-          reportsThisMonth: reportsThisMonth || 0,
+          totalReports: workflowStats.totalReports,
+          reportsThisMonth,
+          pendingReports: workflowStats.pendingReports,
+          checkedReports: workflowStats.checkedReports,
+          completedReports: workflowStats.completedReports,
           activeTeamMembers,
           activeWorkers,
           pendingInvitations,
@@ -220,7 +251,7 @@ const Dashboard = () => {
           participatedReports,
         });
 
-        setRecentReports(recentReportsData || []);
+        setRecentReports(visibleReports.slice(0, 5));
       } catch (error) {
         console.error("Error loading dashboard:", error);
 
@@ -235,22 +266,6 @@ const Dashboard = () => {
 
     loadDashboard();
   }, [user, profile, profileLoading, isAdmin, isSupervisor, isWorker]);
-
-  const formatDate = (dateValue) => {
-    if (!dateValue) return "Not provided";
-
-    const date = new Date(`${dateValue}T00:00:00`);
-
-    if (Number.isNaN(date.getTime())) {
-      return dateValue;
-    }
-
-    return date.toLocaleDateString("en-AU", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
 
   if (loadingDashboard || profileLoading) {
     return (
@@ -315,12 +330,45 @@ const Dashboard = () => {
         </div>
       )}
 
+      <div className="dashboard-stats-grid mb-4">
+        <StatCard
+          label={isWorker ? "Visible reports" : "Total reports"}
+          value={stats.totalReports}
+          helper={
+            isWorker
+              ? "Created by you or jobs where you participated"
+              : "All visible company reports"
+          }
+        />
+
+        <StatCard
+          label="Pending"
+          value={stats.pendingReports}
+          helper="Waiting for review or completion"
+          variant="pending"
+        />
+
+        <StatCard
+          label="Checked"
+          value={stats.checkedReports}
+          helper="Reviewed and ready to close"
+          variant="checked"
+        />
+
+        <StatCard
+          label="Completed"
+          value={stats.completedReports}
+          helper="Finished and closed"
+          variant="completed"
+        />
+      </div>
+
       {isAdmin && (
-        <div className="dashboard-stats-grid mb-4">
+        <div className="dashboard-stats-grid dashboard-stats-secondary mb-4">
           <StatCard
-            label="Total reports"
-            value={stats.totalReports}
-            helper="All company reports"
+            label="Reports this month"
+            value={stats.reportsThisMonth}
+            helper="Current month activity"
           />
 
           <StatCard
@@ -336,19 +384,19 @@ const Dashboard = () => {
           />
 
           <StatCard
-            label="Reports this month"
-            value={stats.reportsThisMonth}
-            helper="Current month activity"
+            label="Active workers"
+            value={stats.activeWorkers}
+            helper="Current field users"
           />
         </div>
       )}
 
       {isSupervisor && (
-        <div className="dashboard-stats-grid mb-4">
+        <div className="dashboard-stats-grid dashboard-stats-secondary mb-4">
           <StatCard
-            label="Company reports"
-            value={stats.totalReports}
-            helper="Reports visible to you"
+            label="Reports this month"
+            value={stats.reportsThisMonth}
+            helper="Current month activity"
           />
 
           <StatCard
@@ -356,23 +404,11 @@ const Dashboard = () => {
             value={stats.activeWorkers}
             helper="Workers in your company"
           />
-
-          <StatCard
-            label="Reports this month"
-            value={stats.reportsThisMonth}
-            helper="Current month activity"
-          />
         </div>
       )}
 
       {isWorker && (
-        <div className="dashboard-stats-grid mb-4">
-          <StatCard
-            label="Visible reports"
-            value={stats.totalReports}
-            helper="Created by you or jobs where you participated"
-          />
-
+        <div className="dashboard-stats-grid dashboard-stats-secondary mb-4">
           <StatCard
             label="Created by me"
             value={stats.createdByMe}
@@ -429,6 +465,10 @@ const Dashboard = () => {
                         <small>{report.service_type || "No service"}</small>
                         <small>{formatDate(report.job_date)}</small>
                       </div>
+
+                      <span className={getStatusBadgeClass(report.status)}>
+                        {getStatusLabel(report.status)}
+                      </span>
                     </Link>
                   ))}
                 </div>
@@ -442,14 +482,14 @@ const Dashboard = () => {
             <QuickAction
               to="/create-report"
               title="Create Report"
-              description="Start a new professional job report with photos, notes and team involved."
+              description="Start a new professional job report with photos, notes, workflow status and team involved."
               buttonLabel="Create"
             />
 
             <QuickAction
               to="/reports"
               title="Reports"
-              description="Review saved reports, open details, download PDFs and manage report records."
+              description="Review reports, update workflow status, open details and download PDFs."
               buttonLabel="Open"
             />
 
@@ -474,8 +514,8 @@ const Dashboard = () => {
             {isSupervisor && (
               <QuickAction
                 to="/reports"
-                title="Company activity"
-                description="Review operational reports created across your company workspace."
+                title="Company workflow"
+                description="Review pending, checked and completed jobs across your company workspace."
                 buttonLabel="Review"
               />
             )}

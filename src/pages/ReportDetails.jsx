@@ -9,6 +9,22 @@ const getTodayDate = () => {
   return new Date().toISOString().split("T")[0];
 };
 
+const getStatusLabel = (status) => {
+  if (status === "pending") return "Pending";
+  if (status === "checked") return "Checked";
+  if (status === "completed") return "Completed";
+
+  return "Pending";
+};
+
+const getStatusBadgeClass = (status) => {
+  if (status === "completed") return "bg-success";
+  if (status === "checked") return "bg-primary";
+  if (status === "pending") return "bg-warning text-dark";
+
+  return "bg-secondary";
+};
+
 const mapSupabaseReportToPreview = ({
   report,
   company,
@@ -46,6 +62,7 @@ const mapSupabaseReportToPreview = ({
     workCompleted: report.work_completed || "",
     issuesFound: report.issues_found || "",
     recommendations: report.recommendations || "",
+    status: report.status || "pending",
     beforePhotos,
     afterPhotos,
     createdAt: report.created_at || "",
@@ -83,22 +100,12 @@ const ReportDetails = () => {
       setMessage(null);
 
       try {
-        let reportQuery = supabase
+        const { data: report, error: reportError } = await supabase
           .from("reports")
           .select("*")
           .eq("id", id)
-          .eq("company_id", profile.company_id);
-
-        if (profile.role === "worker") {
-          /*
-            Workers can view reports they created or reports where they are
-            involved through RLS. We do not add created_by here because the
-            database policy already protects access.
-          */
-        }
-
-        const { data: report, error: reportError } =
-          await reportQuery.single();
+          .eq("company_id", profile.company_id)
+          .single();
 
         if (reportError) {
           throw reportError;
@@ -258,9 +265,17 @@ const ReportDetails = () => {
         <div>
           <p className="eyebrow mb-2">Report details</p>
 
-          <h1 className="section-title mb-2">
-            {reportData.reportNumber || "Job report"}
-          </h1>
+          <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
+            <h1 className="section-title mb-0">
+              {reportData.reportNumber || "Job report"}
+            </h1>
+
+            <span
+              className={`badge ${getStatusBadgeClass(reportData.status)} text-capitalize`}
+            >
+              {getStatusLabel(reportData.status)}
+            </span>
+          </div>
 
           <p className="section-subtitle mb-0">
             View, download or edit this saved JobProof report.
