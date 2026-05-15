@@ -1,137 +1,149 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabaseClient";
 
-const initialBusinessProfile = {
+const BUSINESS_PROFILE_KEY = "jobproofBusinessProfile";
+const BUSINESS_LOGOS_BUCKET = "business-logos";
+
+const emptyBusinessProfile = {
   businessName: "",
   businessEmail: "",
   businessPhone: "",
-  defaultWorkerName: "",
   businessLogo: "",
+  workerName: "",
+};
+
+const getLocalBusinessProfile = () => {
+  try {
+    return (
+      JSON.parse(localStorage.getItem(BUSINESS_PROFILE_KEY)) ||
+      emptyBusinessProfile
+    );
+  } catch (error) {
+    console.error("Error reading business profile from localStorage:", error);
+    return emptyBusinessProfile;
+  }
 };
 
 const BusinessProfile = () => {
-  const { user, profile, authLoading, profileLoading, isAuthenticated, fetchProfile } =
-    useAuth();
+  const { user, profile, profileLoading, fetchProfile } = useAuth();
 
-  const [businessProfile, setBusinessProfile] = useState(initialBusinessProfile);
-  const [businessLogoFile, setBusinessLogoFile] = useState(null);
-  const [message, setMessage] = useState({
-    type: "",
-    text: "",
-  });
-  const [loading, setLoading] = useState(false);
+  const [businessProfile, setBusinessProfile] = useState(emptyBusinessProfile);
+  const [companyId, setCompanyId] = useState(null);
+  const [logoFile, setLogoFile] = useState(null);
+  const [logoPreview, setLogoPreview] = useState("");
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [message, setMessage] = useState(null);
+
+  const isAdmin = profile?.role === "admin";
 
   useEffect(() => {
     const loadBusinessProfile = async () => {
-      if (!isAuthenticated || authLoading || profileLoading) return;
+      if (profileLoading) return;
 
-      const savedProfile =
-        JSON.parse(localStorage.getItem("jobproofBusinessProfile")) || null;
+      setLoadingProfile(true);
+      setMessage(null);
 
-      if (savedProfile) {
+      try {
+        const localProfile = getLocalBusinessProfile();
+
         setBusinessProfile({
-          ...initialBusinessProfile,
-          ...savedProfile,
+          ...emptyBusinessProfile,
+          ...localProfile,
+          workerName: profile?.full_name || localProfile.workerName || "",
         });
-      }
 
-      if (!profile?.company_id) return;
+        setLogoPreview(localProfile.businessLogo || "");
 
-      const { data, error } = await supabase
-        .from("companies")
-        .select(
-          "id, business_name, business_email, business_phone, business_logo_url"
-        )
-        .eq("id", profile.company_id)
-        .single();
+        if (!user?.id || !profile?.company_id) {
+          setCompanyId(null);
+          setLoadingProfile(false);
+          return;
+        }
 
-      if (error) {
-        console.error("Error loading company:", error);
-        return;
-      }
+        const { data, error } = await supabase
+          .from("companies")
+          .select(
+            "id, business_name, business_email, business_phone, business_logo_url"
+          )
+          .eq("id", profile.company_id)
+          .single();
 
-      if (data) {
+        if (error) {
+          throw error;
+        }
+
         const loadedProfile = {
           businessName: data.business_name || "",
           businessEmail: data.business_email || "",
           businessPhone: data.business_phone || "",
           businessLogo: data.business_logo_url || "",
-          defaultWorkerName: profile.full_name || "",
+          workerName: profile?.full_name || "",
         };
 
+        setCompanyId(data.id);
         setBusinessProfile(loadedProfile);
+        setLogoPreview(data.business_logo_url || "");
 
         localStorage.setItem(
-          "jobproofBusinessProfile",
+          BUSINESS_PROFILE_KEY,
           JSON.stringify(loadedProfile)
         );
+      } catch (error) {
+        console.error("Error loading business profile:", error);
+
+        setMessage({
+          type: "danger",
+          text: error.message || "There was an error loading your business profile.",
+        });
+      } finally {
+        setLoadingProfile(false);
       }
     };
 
     loadBusinessProfile();
-  }, [authLoading, profileLoading, isAuthenticated, profile]);
+  }, [user, profile, profileLoading]);
 
   const showMessage = (type, text) => {
     setMessage({ type, text });
-
-    setTimeout(() => {
-      setMessage({ type: "", text: "" });
-    }, 4000);
   };
 
   const handleChange = (event) => {
     const { name, value } = event.target;
 
-    setBusinessProfile({
-      ...businessProfile,
+    setBusinessProfile((currentProfile) => ({
+      ...currentProfile,
       [name]: value,
-    });
+    }));
   };
 
   const handleLogoChange = (event) => {
-    const file = event.target.files[0];
+    const file = event.target.files?.[0];
 
     if (!file) return;
 
-    setBusinessLogoFile(file);
-
-    const previewUrl = URL.createObjectURL(file);
-
-    setBusinessProfile({
-      ...businessProfile,
-      businessLogo: previewUrl,
-    });
+    setLogoFile(file);
+    setLogoPreview(URL.createObjectURL(file));
   };
 
-  const handleRemoveLogo = () => {
-    setBusinessLogoFile(null);
-
-    setBusinessProfile({
-      ...businessProfile,
-      businessLogo: "",
-    });
-  };
-
-  const uploadBusinessLogo = async () => {
-    if (!businessLogoFile || !user?.id) {
+  const uploadBusinessLogo = async (currentCompanyId) => {
+    if (!logoFile) {
       return businessProfile.businessLogo || "";
     }
 
-    const fileExtension = businessLogoFile.name.split(".").pop();
-    const cleanFileName = businessLogoFile.name
-      .replace(/\.[^/.]+$/, "")
-      .replace(/[^a-zA-Z0-9-_]/g, "-")
-      .toLowerCase();
+    const fileExtension =
+      logoFile.name?.split(".").pop()?.toLowerCase() || "jpg";
 
-    const filePath = `${user.id}/${Date.now()}-${cleanFileName}.${fileExtension}`;
+    const filePath = `${currentCompanyId}/business-logo-${Date.now()}.${fileExtension}`;
 
     const { error: uploadError } = await supabase.storage
-      .from("business-logos")
-      .upload(filePath, businessLogoFile, {
+      .from(BUSINESS_LOGOS_BUCKET)
+      .upload(filePath, logoFile, {
         cacheControl: "3600",
         upsert: true,
+        contentType: logoFile.type || "image/jpeg",
       });
 
     if (uploadError) {
@@ -139,152 +151,177 @@ const BusinessProfile = () => {
     }
 
     const { data } = supabase.storage
-      .from("business-logos")
+      .from(BUSINESS_LOGOS_BUCKET)
       .getPublicUrl(filePath);
 
     return data.publicUrl;
   };
 
-  const handleSaveProfile = async () => {
-    if (!isAuthenticated || !user) {
-      showMessage("warning", "Please log in before saving a business profile.");
+  const saveLocalProfile = (profileToSave) => {
+    localStorage.setItem(BUSINESS_PROFILE_KEY, JSON.stringify(profileToSave));
+  };
+
+  const handleSaveProfile = async (event) => {
+    event.preventDefault();
+
+    if (!isAdmin) {
+      showMessage(
+        "warning",
+        "Only company admins can update the Business Profile."
+      );
+      return;
+    }
+
+    if (!user?.id) {
+      showMessage("warning", "Please log in before saving your profile.");
       return;
     }
 
     if (!businessProfile.businessName.trim()) {
-      showMessage("warning", "Business name is required.");
+      showMessage("warning", "Please enter your business name.");
       return;
     }
 
-    setLoading(true);
+    setSavingProfile(true);
+    setMessage(null);
 
     try {
-      const logoUrl = await uploadBusinessLogo();
+      let currentCompanyId = companyId || profile?.company_id || null;
+      let logoUrl = businessProfile.businessLogo || "";
 
-      let companyId = profile?.company_id || null;
-
-      if (!companyId) {
-        const { data: newCompany, error: companyError } = await supabase
+      if (!currentCompanyId) {
+        const { data: newCompany, error: companyInsertError } = await supabase
           .from("companies")
           .insert({
-  owner_id: user.id,
-  business_name: businessProfile.businessName,
-  business_email: businessProfile.businessEmail,
-  business_phone: businessProfile.businessPhone,
-  business_logo_url: logoUrl,
-})
-          .select("id")
-          .single();
-
-        if (companyError) {
-          throw companyError;
-        }
-
-        companyId = newCompany.id;
-
-        const { error: profileError } = await supabase
-          .from("profiles")
-          .update({
-            company_id: companyId,
-            full_name: businessProfile.defaultWorkerName || profile?.full_name,
-          })
-          .eq("id", user.id);
-
-        if (profileError) {
-          throw profileError;
-        }
-      } else {
-        const { error: companyUpdateError } = await supabase
-          .from("companies")
-          .update({
+            owner_id: user.id,
             business_name: businessProfile.businessName,
             business_email: businessProfile.businessEmail,
             business_phone: businessProfile.businessPhone,
-            business_logo_url: logoUrl,
-            updated_at: new Date().toISOString(),
+            business_logo_url: "",
           })
-          .eq("id", companyId);
+          .select("id")
+          .single();
 
-        if (companyUpdateError) {
-          throw companyUpdateError;
+        if (companyInsertError) {
+          throw companyInsertError;
         }
 
-        const { error: profileUpdateError } = await supabase
-          .from("profiles")
-          .update({
-            full_name: businessProfile.defaultWorkerName || profile?.full_name,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", user.id);
-
-        if (profileUpdateError) {
-          throw profileUpdateError;
-        }
+        currentCompanyId = newCompany.id;
       }
 
-      const savedBusinessProfile = {
+      logoUrl = await uploadBusinessLogo(currentCompanyId);
+
+      const { error: companyUpdateError } = await supabase
+        .from("companies")
+        .update({
+          business_name: businessProfile.businessName,
+          business_email: businessProfile.businessEmail,
+          business_phone: businessProfile.businessPhone,
+          business_logo_url: logoUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", currentCompanyId);
+
+      if (companyUpdateError) {
+        throw companyUpdateError;
+      }
+
+      const { error: profileUpdateError } = await supabase
+        .from("profiles")
+        .update({
+          company_id: currentCompanyId,
+          full_name:
+            businessProfile.workerName.trim() ||
+            profile?.full_name ||
+            user.email?.split("@")[0] ||
+            "User",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id);
+
+      if (profileUpdateError) {
+        throw profileUpdateError;
+      }
+
+      const savedProfile = {
         ...businessProfile,
         businessLogo: logoUrl,
+        workerName:
+          businessProfile.workerName.trim() ||
+          profile?.full_name ||
+          user.email?.split("@")[0] ||
+          "User",
       };
 
-      setBusinessProfile(savedBusinessProfile);
-      setBusinessLogoFile(null);
-
-      localStorage.setItem(
-        "jobproofBusinessProfile",
-        JSON.stringify(savedBusinessProfile)
-      );
+      setCompanyId(currentCompanyId);
+      setBusinessProfile(savedProfile);
+      setLogoPreview(logoUrl);
+      setLogoFile(null);
+      saveLocalProfile(savedProfile);
 
       await fetchProfile(user);
 
-      showMessage("success", "Business profile saved successfully.");
+      showMessage(
+        "success",
+        "Business Profile saved successfully. Your reports will now use this company information automatically."
+      );
     } catch (error) {
-      console.error(error);
+      console.error("Error saving business profile:", error);
+
       showMessage(
         "danger",
-        "There was an error saving the business profile. Please try again."
+        error.message ||
+          "There was an error saving the business profile. Please try again."
       );
     } finally {
-      setLoading(false);
+      setSavingProfile(false);
     }
   };
 
   const handleClearProfile = () => {
     const confirmClear = window.confirm(
-      "Are you sure you want to clear the local business profile form?"
+      "Are you sure you want to clear this form? This will only clear the current form and local copy, not the company saved in Supabase."
     );
 
     if (!confirmClear) return;
 
-    localStorage.removeItem("jobproofBusinessProfile");
-    setBusinessLogoFile(null);
-    setBusinessProfile(initialBusinessProfile);
-
-    showMessage(
-      "info",
-      "Local form cleared. Your saved company in Supabase was not deleted."
-    );
+    setBusinessProfile(emptyBusinessProfile);
+    setLogoFile(null);
+    setLogoPreview("");
+    localStorage.removeItem(BUSINESS_PROFILE_KEY);
+    setMessage(null);
   };
 
-  if (authLoading || profileLoading) {
+  if (profileLoading || loadingProfile) {
     return (
-      <section className="business-profile-page">
-        <div className="alert alert-info">Loading business profile...</div>
+      <section className="py-5 text-center">
+        <div className="spinner-border text-primary mb-3" role="status">
+          <span className="visually-hidden">Loading...</span>
+        </div>
+
+        <h1 className="h5">Loading business profile</h1>
+
+        <p className="text-muted mb-0">
+          Please wait while JobProof loads your company information.
+        </p>
       </section>
     );
   }
 
-  if (!isAuthenticated) {
+  if (!user) {
     return (
-      <section className="business-profile-page">
-        <div className="card shadow-sm">
-          <div className="card-body">
-            <h1 className="mb-2">Business Profile</h1>
-            <p className="text-muted">
-              Please log in to set up your company profile.
+      <section className="py-5">
+        <div className="card shadow-sm border-0">
+          <div className="card-body p-4 p-md-5 text-center">
+            <p className="eyebrow mb-2">Business Profile</p>
+
+            <h1 className="h3 mb-3">Log in required</h1>
+
+            <p className="text-muted mb-4">
+              Please log in before setting up your company profile.
             </p>
 
-            <div className="d-flex gap-2 flex-wrap">
+            <div className="d-flex justify-content-center gap-2 flex-wrap">
               <Link to="/login" className="btn btn-primary">
                 Log in
               </Link>
@@ -299,61 +336,88 @@ const BusinessProfile = () => {
     );
   }
 
-  return (
-    <section className="business-profile-page">
-      <div className="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-3">
-        <div>
-          <h1 className="mb-1">Business Profile</h1>
-          <p className="text-muted mb-0">
-            Save your company details and use them automatically in job reports.
-          </p>
+  if (profile && !isAdmin) {
+    return (
+      <section className="py-5">
+        <div className="card shadow-sm border-0">
+          <div className="card-body p-4 p-md-5 text-center">
+            <p className="eyebrow mb-2">Restricted area</p>
 
-          {profile?.company_id ? (
-            <p className="small text-success fw-semibold mt-2 mb-0">
-              Company connected to your admin profile.
+            <h1 className="h3 mb-3">Admin access required</h1>
+
+            <p className="text-muted mb-4">
+              Only company admins can update the Business Profile. Your account
+              can still create and manage job reports based on your role.
             </p>
-          ) : (
-            <p className="small text-warning fw-semibold mt-2 mb-0">
-              No company connected yet. Saving this form will create one.
-            </p>
-          )}
+
+            <Link to="/reports" className="btn btn-primary">
+              Back to Reports
+            </Link>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section>
+      <div className="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4">
+        <div>
+          <p className="eyebrow mb-2">Company setup</p>
+
+          <h1 className="section-title mb-2">Business Profile</h1>
+
+          <p className="section-subtitle mb-0">
+            Save your company details once. JobProof will add them automatically
+            to every report.
+          </p>
         </div>
 
-        <div className="business-profile-actions d-flex gap-2 flex-wrap">
+        <div className="desktop-report-actions d-flex gap-2 flex-wrap">
           <button
-            className="btn btn-outline-danger"
-            onClick={handleClearProfile}
-            disabled={loading}
+            type="button"
+            className="btn btn-primary"
+            onClick={handleSaveProfile}
+            disabled={savingProfile}
           >
-            Clear Form
+            {savingProfile ? "Saving..." : "Save Profile"}
           </button>
 
           <button
-            className="btn btn-primary"
-            onClick={handleSaveProfile}
-            disabled={loading}
+            type="button"
+            className="btn btn-outline-danger"
+            onClick={handleClearProfile}
+            disabled={savingProfile}
           >
-            {loading ? "Saving..." : "Save Profile"}
+            Clear Form
           </button>
         </div>
       </div>
 
-      {message.text && (
+      {message && (
         <div className={`alert alert-${message.type}`} role="alert">
           {message.text}
         </div>
       )}
 
+      {!companyId && (
+        <div className="alert alert-warning" role="alert">
+          <strong>No company connected yet.</strong> Saving this form will create
+          one and connect it to your admin profile.
+        </div>
+      )}
+
       <div className="row g-4">
-        <div className="col-lg-6">
-          <div className="card shadow-sm business-profile-card">
-            <div className="card-body">
-              <h2 className="h4 mb-4">Company details</h2>
+        <div className="col-lg-7">
+          <form className="card shadow-sm border-0" onSubmit={handleSaveProfile}>
+            <div className="card-body p-4">
+              <h2 className="h4 mb-4">Company information</h2>
 
               <div className="mb-3">
                 <label htmlFor="businessName" className="form-label">
                   Business name
                 </label>
+
                 <input
                   id="businessName"
                   type="text"
@@ -361,7 +425,7 @@ const BusinessProfile = () => {
                   name="businessName"
                   value={businessProfile.businessName}
                   onChange={handleChange}
-                  placeholder="Example: CleanPro Melbourne"
+                  placeholder="Example: CleanPro Services"
                 />
               </div>
 
@@ -369,6 +433,7 @@ const BusinessProfile = () => {
                 <label htmlFor="businessEmail" className="form-label">
                   Business email
                 </label>
+
                 <input
                   id="businessEmail"
                   type="email"
@@ -376,7 +441,7 @@ const BusinessProfile = () => {
                   name="businessEmail"
                   value={businessProfile.businessEmail}
                   onChange={handleChange}
-                  placeholder="Example: hello@cleanpro.com.au"
+                  placeholder="Example: admin@cleanpro.com.au"
                 />
               </div>
 
@@ -384,9 +449,10 @@ const BusinessProfile = () => {
                 <label htmlFor="businessPhone" className="form-label">
                   Business phone
                 </label>
+
                 <input
                   id="businessPhone"
-                  type="text"
+                  type="tel"
                   className="form-control"
                   name="businessPhone"
                   value={businessProfile.businessPhone}
@@ -396,24 +462,30 @@ const BusinessProfile = () => {
               </div>
 
               <div className="mb-3">
-                <label htmlFor="defaultWorkerName" className="form-label">
+                <label htmlFor="workerName" className="form-label">
                   Your display name
                 </label>
+
                 <input
-                  id="defaultWorkerName"
+                  id="workerName"
                   type="text"
                   className="form-control"
-                  name="defaultWorkerName"
-                  value={businessProfile.defaultWorkerName}
+                  name="workerName"
+                  value={businessProfile.workerName}
                   onChange={handleChange}
                   placeholder="Example: Cristian Castillo"
                 />
+
+                <small className="text-muted">
+                  This name will appear as the person completing reports.
+                </small>
               </div>
 
-              <div className="mb-3">
+              <div className="mb-4">
                 <label htmlFor="businessLogo" className="form-label">
                   Business logo
                 </label>
+
                 <input
                   id="businessLogo"
                   type="file"
@@ -421,83 +493,116 @@ const BusinessProfile = () => {
                   accept="image/*"
                   onChange={handleLogoChange}
                 />
-                <small className="text-muted d-block mt-2">
-                  Recommended: square PNG or JPG logo.
+
+                <small className="text-muted">
+                  Upload a clean PNG or JPG logo for better PDF branding.
                 </small>
               </div>
 
-              {businessProfile.businessLogo && (
+              <div className="d-flex gap-2 flex-wrap">
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={savingProfile}
+                >
+                  {savingProfile ? "Saving..." : "Save Profile"}
+                </button>
+
                 <button
                   type="button"
-                  className="btn btn-sm btn-outline-danger"
-                  onClick={handleRemoveLogo}
-                  disabled={loading}
+                  className="btn btn-outline-danger"
+                  onClick={handleClearProfile}
+                  disabled={savingProfile}
                 >
-                  Remove logo
+                  Clear Form
                 </button>
-              )}
+              </div>
             </div>
-          </div>
+          </form>
         </div>
 
-        <div className="col-lg-6">
-          <div className="card shadow-sm business-profile-card">
-            <div className="card-body">
+        <div className="col-lg-5">
+          <div className="card shadow-sm border-0">
+            <div className="card-body p-4">
               <h2 className="h4 mb-4">Profile preview</h2>
 
               <div className="business-profile-preview">
-                <div className="business-profile-logo-wrapper mb-3">
-                  {businessProfile.businessLogo ? (
+                <div className="business-logo-preview mb-3">
+                  {logoPreview ? (
                     <img
-                      src={businessProfile.businessLogo}
-                      alt="Business logo"
-                      className="business-logo-preview"
+                      src={logoPreview}
+                      alt="Business logo preview"
+                      className="img-fluid rounded"
                     />
                   ) : (
                     <div className="business-logo-placeholder">
-                      No logo uploaded
+                      <span>No logo</span>
                     </div>
                   )}
                 </div>
 
-                <h3 className="h5 fw-bold mb-2">
-                  {businessProfile.businessName || "Your Business Name"}
+                <h3 className="h5 mb-2">
+                  {businessProfile.businessName || "Your business name"}
                 </h3>
 
-                <div className="business-profile-preview-details">
-                  <p className="text-muted mb-1">
-                    {businessProfile.businessEmail || "business@email.com"}
-                  </p>
+                <p className="text-muted mb-2">
+                  {businessProfile.businessEmail || "business@email.com"}
+                </p>
 
-                  <p className="text-muted mb-1">
-                    {businessProfile.businessPhone || "Business phone"}
-                  </p>
+                <p className="text-muted mb-2">
+                  {businessProfile.businessPhone || "Business phone"}
+                </p>
 
-                  <p className="text-muted mb-0">
-                    Display name:{" "}
-                    <strong>
-                      {businessProfile.defaultWorkerName || "Your name"}
-                    </strong>
-                  </p>
-                </div>
+                <hr />
+
+                <p className="mb-1">
+                  <strong>Reports completed by:</strong>
+                </p>
+
+                <p className="text-muted mb-0">
+                  {businessProfile.workerName || "Your display name"}
+                </p>
               </div>
             </div>
           </div>
 
-          <div className="alert alert-info mt-4">
-            These details will be saved to your Supabase company profile and
-            used to pre-fill new reports.
+          <div className="card shadow-sm border-0 mt-4">
+            <div className="card-body p-4">
+              <h2 className="h5 mb-3">How this works</h2>
+
+              <p className="text-muted mb-3">
+                This profile is used as your company source of truth. New reports
+                automatically include your business name, contact details and
+                logo.
+              </p>
+
+              <ul className="text-muted mb-0">
+                <li>Admins can update this profile.</li>
+                <li>Workers use these details automatically.</li>
+                <li>PDF reports stay consistent across the company.</li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="mobile-business-profile-actions">
+      <div className="mobile-report-action-bar">
         <button
-          className="btn btn-primary mobile-action-button"
+          type="button"
+          className="btn btn-primary"
           onClick={handleSaveProfile}
-          disabled={loading}
+          disabled={savingProfile}
         >
-          {loading ? "Saving..." : "Save Profile"}
+          {savingProfile ? "Saving..." : "Save"}
+        </button>
+
+        <button
+          type="button"
+          className="btn btn-outline-danger"
+          onClick={handleClearProfile}
+          disabled={savingProfile}
+        >
+          Clear
         </button>
       </div>
     </section>

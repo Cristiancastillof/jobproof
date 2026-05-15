@@ -44,6 +44,18 @@ const getStatusBadgeClass = (status) => {
   return "bg-info text-dark";
 };
 
+const getRoleDescription = (role) => {
+  if (role === "admin") {
+    return "You can view and manage all company reports.";
+  }
+
+  if (role === "supervisor") {
+    return "You can view and manage reports across your company.";
+  }
+
+  return "You can view and manage reports created by you.";
+};
+
 const Reports = () => {
   const { user, profile, displayRole, profileLoading } = useAuth();
 
@@ -51,6 +63,8 @@ const Reports = () => {
   const [loadingReports, setLoadingReports] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [message, setMessage] = useState(null);
+
+  const isWorker = profile?.role === "worker";
 
   useEffect(() => {
     const loadReports = async () => {
@@ -74,7 +88,7 @@ const Reports = () => {
       setMessage(null);
 
       try {
-        const { data, error } = await supabase
+        let reportsQuery = supabase
           .from("reports")
           .select(
             `
@@ -99,6 +113,12 @@ const Reports = () => {
           .eq("company_id", profile.company_id)
           .order("created_at", { ascending: false });
 
+        if (profile.role === "worker") {
+          reportsQuery = reportsQuery.eq("created_by", user.id);
+        }
+
+        const { data, error } = await reportsQuery;
+
         if (error) {
           throw error;
         }
@@ -106,6 +126,7 @@ const Reports = () => {
         setReports(data || []);
       } catch (error) {
         console.error("Error loading reports:", error);
+
         setMessage({
           type: "danger",
           text: error.message || "There was an error loading reports.",
@@ -149,8 +170,9 @@ const Reports = () => {
         </div>
 
         <h1 className="h5">Loading reports</h1>
+
         <p className="text-muted mb-0">
-          Please wait while JobProof loads your company reports.
+          Please wait while JobProof loads your workspace reports.
         </p>
       </section>
     );
@@ -162,6 +184,7 @@ const Reports = () => {
         <div className="card shadow-sm border-0">
           <div className="card-body p-4 p-md-5 text-center">
             <h1 className="h3 mb-3">Business Profile required</h1>
+
             <p className="text-muted mb-4">
               Complete your Business Profile before viewing reports.
             </p>
@@ -179,12 +202,16 @@ const Reports = () => {
     <section>
       <div className="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4">
         <div>
-          <p className="eyebrow mb-2">Reports</p>
+          <p className="eyebrow mb-2">
+            {isWorker ? "My reports" : "Company reports"}
+          </p>
 
-          <h1 className="section-title mb-2">Company job reports</h1>
+          <h1 className="section-title mb-2">
+            {isWorker ? "My job reports" : "Company job reports"}
+          </h1>
 
           <p className="section-subtitle mb-0">
-            Review, search and manage reports saved in your JobProof workspace.
+            {getRoleDescription(profile?.role)}
           </p>
         </div>
 
@@ -221,10 +248,16 @@ const Reports = () => {
 
             <div className="col-lg-5">
               <div className="reports-summary-box">
-                <span className="reports-summary-label">Total reports</span>
+                <span className="reports-summary-label">
+                  {isWorker ? "My reports" : "Total reports"}
+                </span>
+
                 <strong>{reports.length}</strong>
+
                 <span className="reports-summary-divider"></span>
+
                 <span className="reports-summary-label">Your role</span>
+
                 <strong>{displayRole}</strong>
               </div>
             </div>
@@ -241,7 +274,9 @@ const Reports = () => {
 
             <p className="text-muted mb-4">
               {reports.length === 0
-                ? "Create your first job report to start building your company history."
+                ? isWorker
+                  ? "Create your first job report to start building your work history."
+                  : "Create your first job report to start building your company history."
                 : "Try another search term or clear the search field."}
             </p>
 
@@ -275,6 +310,7 @@ const Reports = () => {
                       <div className="fw-bold">
                         {report.report_number || "No report number"}
                       </div>
+
                       <div className="text-muted small">
                         Created {formatCreatedAt(report.created_at)}
                       </div>
@@ -284,6 +320,7 @@ const Reports = () => {
                       <div className="fw-semibold">
                         {report.client_name || "Not specified"}
                       </div>
+
                       <div className="text-muted small">
                         {report.job_address || "No address added"}
                       </div>
@@ -293,6 +330,7 @@ const Reports = () => {
 
                     <td>
                       <div>{report.service_type || "Not specified"}</div>
+
                       <div className="text-muted small">
                         {report.total_hours || "No hours recorded"}
                       </div>
@@ -300,6 +338,7 @@ const Reports = () => {
 
                     <td>
                       <div>{report.profiles?.full_name || "Unknown user"}</div>
+
                       <div className="text-muted small">
                         {report.profiles?.role || "worker"}
                       </div>

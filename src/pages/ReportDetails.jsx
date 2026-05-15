@@ -100,7 +100,7 @@ const ReportDetails = () => {
       setMessage(null);
 
       try {
-        const { data: report, error: reportError } = await supabase
+        let reportQuery = supabase
           .from("reports")
           .select(
             `
@@ -113,8 +113,14 @@ const ReportDetails = () => {
           `
           )
           .eq("id", id)
-          .eq("company_id", profile.company_id)
-          .single();
+          .eq("company_id", profile.company_id);
+
+        if (profile.role === "worker") {
+          reportQuery = reportQuery.eq("created_by", user.id);
+        }
+
+        const { data: report, error: reportError } =
+          await reportQuery.single();
 
         if (reportError) {
           throw reportError;
@@ -154,9 +160,12 @@ const ReportDetails = () => {
         setReportData(mappedReport);
       } catch (error) {
         console.error("Error loading report details:", error);
+
         setMessage({
           type: "danger",
-          text: error.message || "There was an error loading this report.",
+          text:
+            error.message ||
+            "This report could not be found or you do not have access to it.",
         });
       } finally {
         setLoadingReport(false);
@@ -168,6 +177,7 @@ const ReportDetails = () => {
 
   const handleDownloadPDF = () => {
     if (!reportData) return;
+
     generatePDF(reportData);
   };
 
@@ -183,6 +193,7 @@ const ReportDetails = () => {
         </div>
 
         <h1 className="h5">Loading report details</h1>
+
         <p className="text-muted mb-0">
           Please wait while JobProof loads this report.
         </p>
@@ -195,6 +206,8 @@ const ReportDetails = () => {
       <section className="py-5">
         <div className="card shadow-sm border-0">
           <div className="card-body p-4 p-md-5 text-center">
+            <p className="eyebrow mb-2">Report details</p>
+
             <h1 className="h3 mb-3">Report not found</h1>
 
             <p className="text-muted mb-4">

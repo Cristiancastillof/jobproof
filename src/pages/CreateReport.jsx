@@ -237,11 +237,18 @@ const CreateReport = () => {
         setCompany(companyData);
 
         if (isEditMode) {
-          const { data: existingReport, error: reportError } = await supabase
+          let reportQuery = supabase
             .from("reports")
             .select("*")
             .eq("id", id)
-            .single();
+            .eq("company_id", profile.company_id);
+
+          if (profile.role === "worker") {
+            reportQuery = reportQuery.eq("created_by", user.id);
+          }
+
+          const { data: existingReport, error: reportError } =
+            await reportQuery.single();
 
           if (reportError) {
             throw reportError;
@@ -251,6 +258,7 @@ const CreateReport = () => {
             .from("report_photos")
             .select("id, photo_type, photo_url, photo_order")
             .eq("report_id", id)
+            .eq("company_id", profile.company_id)
             .order("photo_order", { ascending: true });
 
           if (photosError) {
@@ -284,7 +292,9 @@ const CreateReport = () => {
 
         setMessage({
           type: "danger",
-          text: error.message || "There was an error loading this report.",
+          text:
+            error.message ||
+            "This report could not be found or you do not have access to it.",
         });
       } finally {
         setLoadingReport(false);
@@ -457,12 +467,17 @@ const CreateReport = () => {
       let savedReport;
 
       if (isEditMode) {
-        const { data, error } = await supabase
+        let updateQuery = supabase
           .from("reports")
           .update(payload)
           .eq("id", id)
-          .select("*")
-          .single();
+          .eq("company_id", profile.company_id);
+
+        if (profile.role === "worker") {
+          updateQuery = updateQuery.eq("created_by", user.id);
+        }
+
+        const { data, error } = await updateQuery.select("*").single();
 
         if (error) {
           throw error;
@@ -531,7 +546,9 @@ const CreateReport = () => {
 
       setMessage({
         type: "danger",
-        text: error.message || "There was an error saving the report.",
+        text:
+          error.message ||
+          "There was an error saving this report. Please check your permissions and try again.",
       });
     } finally {
       setSavingReport(false);
@@ -598,6 +615,29 @@ const CreateReport = () => {
 
             <Link to="/business-profile" className="btn btn-primary">
               Complete Business Profile
+            </Link>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (message?.type === "danger" && isEditMode && !reportData?.id) {
+    return (
+      <section className="py-5">
+        <div className="card shadow-sm border-0">
+          <div className="card-body p-4 p-md-5 text-center">
+            <p className="eyebrow mb-2">Edit report</p>
+
+            <h1 className="h3 mb-3">Report not available</h1>
+
+            <p className="text-muted mb-4">
+              {message.text ||
+                "This report could not be found or you do not have permission to edit it."}
+            </p>
+
+            <Link to="/reports" className="btn btn-primary">
+              Back to Reports
             </Link>
           </div>
         </div>
