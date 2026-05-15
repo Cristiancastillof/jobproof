@@ -2336,3 +2336,54 @@ body {
     flex-direction: column;
   }
 }
+/* Team management */
+
+.team-card {
+  border-radius: 24px;
+}
+
+.team-info-panel {
+  padding: 18px 20px;
+  border-radius: 20px;
+  background: #f8fafc;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  color: #475569;
+}
+
+.team-info-panel ul {
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.team-table thead th {
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  padding: 14px 16px;
+}
+
+.team-table tbody td {
+  padding: 16px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.team-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.team-empty-state {
+  padding: 22px;
+  border-radius: 18px;
+  background: #f8fafc;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .team-table {
+    min-width: 860px;
+  }
+}

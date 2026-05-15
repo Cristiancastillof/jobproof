@@ -113,6 +113,7 @@ const Dashboard = () => {
   const [company, setCompany] = useState(null);
   const [reports, setReports] = useState([]);
   const [teamCount, setTeamCount] = useState(null);
+  const [pendingInvitesCount, setPendingInvitesCount] = useState(null);
   const [photoCount, setPhotoCount] = useState(null);
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [message, setMessage] = useState(null);
@@ -215,6 +216,21 @@ const Dashboard = () => {
           }
         }
 
+        if (isAdmin) {
+          const { count, error: invitesError } = await supabase
+            .from("team_invitations")
+            .select("id", { count: "exact", head: true })
+            .eq("company_id", profile.company_id)
+            .eq("status", "pending");
+
+          if (invitesError) {
+            console.error("Error loading pending invitations:", invitesError);
+            setPendingInvitesCount(null);
+          } else {
+            setPendingInvitesCount(count || 0);
+          }
+        }
+
         const { count: photosTotal, error: photosError } = await supabase
           .from("report_photos")
           .select("id", { count: "exact", head: true })
@@ -275,9 +291,9 @@ const Dashboard = () => {
           helper: "Active company users",
         },
         {
-          label: "Photos uploaded",
-          value: photoCount ?? "—",
-          helper: "Evidence stored in the cloud",
+          label: "Pending invites",
+          value: pendingInvitesCount ?? "—",
+          helper: "Team links waiting to be accepted",
         },
       ];
     }
@@ -329,7 +345,15 @@ const Dashboard = () => {
         helper: "Most recent saved report",
       },
     ];
-  }, [reports, user, teamCount, photoCount, isAdmin, isSupervisor]);
+  }, [
+    reports,
+    user,
+    teamCount,
+    pendingInvitesCount,
+    photoCount,
+    isAdmin,
+    isSupervisor,
+  ]);
 
   const recentReports = reports.slice(0, 5);
 
@@ -471,10 +495,12 @@ const Dashboard = () => {
                         <strong>
                           {report.report_number || "No report number"}
                         </strong>
+
                         <span>
                           {report.client_name || "No client"} ·{" "}
                           {report.service_type || "No service"}
                         </span>
+
                         <small>
                           {report.profiles?.full_name || "Unknown worker"} ·{" "}
                           {formatDate(report.created_at)}
@@ -521,12 +547,21 @@ const Dashboard = () => {
                 />
 
                 {isAdmin && (
-                  <QuickAction
-                    to="/business-profile"
-                    title="Business Profile"
-                    description="Update company details"
-                    variant="light"
-                  />
+                  <>
+                    <QuickAction
+                      to="/team"
+                      title="Manage Team"
+                      description="Invite supervisors and workers"
+                      variant="light"
+                    />
+
+                    <QuickAction
+                      to="/business-profile"
+                      title="Business Profile"
+                      description="Update company details"
+                      variant="light"
+                    />
+                  </>
                 )}
 
                 {isSupervisor && (
@@ -555,6 +590,7 @@ const Dashboard = () => {
                 {isAdmin && (
                   <>
                     <li>Manage company profile and branding.</li>
+                    <li>Invite supervisors and workers.</li>
                     <li>View all company reports.</li>
                     <li>Track team and evidence activity.</li>
                   </>

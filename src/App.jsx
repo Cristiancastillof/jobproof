@@ -12,6 +12,7 @@ import ReportDetails from "./pages/ReportDetails";
 import BusinessProfile from "./pages/BusinessProfile";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import Team from "./pages/Team";
 
 const HomeRoute = () => {
   const { isAuthenticated, authLoading } = useAuth();
@@ -63,6 +64,15 @@ const App = () => {
             element={
               <ProtectedRoute>
                 <BusinessProfile />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/team"
+            element={
+              <ProtectedRoute>
+                <Team />
               </ProtectedRoute>
             }
           />

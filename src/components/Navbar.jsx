@@ -5,6 +5,8 @@ const Navbar = () => {
   const navigate = useNavigate();
   const { isAuthenticated, displayName, displayRole, signOut } = useAuth();
 
+  const isAdmin = displayRole === "Admin";
+
   const handleSignOut = async () => {
     try {
       await signOut();
@@ -60,12 +62,6 @@ const Navbar = () => {
             {isAuthenticated ? (
               <>
                 <li className="nav-item">
-                  <NavLink to="/business-profile" className={getNavLinkClass}>
-                    Business Profile
-                  </NavLink>
-                </li>
-
-                <li className="nav-item">
                   <NavLink to="/reports" className={getNavLinkClass}>
                     Reports
                   </NavLink>
@@ -76,6 +72,25 @@ const Navbar = () => {
                     Create Report
                   </NavLink>
                 </li>
+
+                {isAdmin && (
+                  <>
+                    <li className="nav-item">
+                      <NavLink to="/team" className={getNavLinkClass}>
+                        Team
+                      </NavLink>
+                    </li>
+
+                    <li className="nav-item">
+                      <NavLink
+                        to="/business-profile"
+                        className={getNavLinkClass}
+                      >
+                        Business Profile
+                      </NavLink>
+                    </li>
+                  </>
+                )}
 
                 <li className="nav-item">
                   <span className="jp-user-chip">
