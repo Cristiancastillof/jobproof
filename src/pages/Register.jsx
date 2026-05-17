@@ -118,6 +118,7 @@ const Register = () => {
   const createStandardAdminProfile = async (userId, email) => {
     const { error } = await supabase.from("profiles").upsert({
       id: userId,
+      company_id: null,
       full_name: formData.fullName.trim(),
       email,
       role: "admin",
@@ -173,11 +174,15 @@ const Register = () => {
         throw error;
       }
 
+      if (!data.user) {
+        throw new Error("The account could not be created. Please try again.");
+      }
+
       if (!data.session) {
         setMessage({
           type: "warning",
           text:
-            "Account created. Please confirm your email, then log in to finish setting up your JobProof account.",
+            "Account created, but email confirmation is enabled. Please confirm your email, then log in to continue.",
         });
         return;
       }
@@ -189,18 +194,24 @@ const Register = () => {
           type: "success",
           text: `Account created. You have joined ${inviteData.company_name} as ${inviteData.role}.`,
         });
-      } else {
-        await createStandardAdminProfile(data.user.id, email);
 
-        setMessage({
-          type: "success",
-          text: "Account created successfully. You can now set up your Business Profile.",
-        });
+        setTimeout(() => {
+          navigate("/", { replace: true });
+        }, 800);
+
+        return;
       }
 
+      await createStandardAdminProfile(data.user.id, email);
+
+      setMessage({
+        type: "success",
+        text: "Admin account created. Complete your Business Profile to start using JobProof.",
+      });
+
       setTimeout(() => {
-        navigate("/");
-      }, 900);
+        navigate("/business-profile", { replace: true });
+      }, 800);
     } catch (error) {
       console.error("Error creating account:", error);
 
@@ -240,19 +251,19 @@ const Register = () => {
       <div className="auth-card">
         <div className="text-center mb-4">
           <p className="eyebrow mb-2">
-            {isInviteRegistration ? "Team invitation" : "Create account"}
+            {isInviteRegistration ? "Team invitation" : "Create admin account"}
           </p>
 
           <h1 className="h3 mb-2">
             {isInviteRegistration
               ? `Join ${inviteData.company_name}`
-              : "Create your JobProof account"}
+              : "Create your company admin account"}
           </h1>
 
           <p className="text-muted mb-0">
             {isInviteRegistration
               ? `You have been invited as ${inviteData.role}.`
-              : "Start creating professional job reports for your business."}
+              : "Start by creating the admin account for your company workspace."}
           </p>
         </div>
 
@@ -287,6 +298,15 @@ const Register = () => {
               </div>
             )}
 
+            {!isInviteRegistration && (
+              <div className="alert alert-info mb-4">
+                <strong>Admin account</strong>
+                <br />
+                This account will manage the company profile, team invitations
+                and report workflow.
+              </div>
+            )}
+
             <div className="mb-3">
               <label htmlFor="registerFullName" className="form-label">
                 Full name
@@ -299,7 +319,7 @@ const Register = () => {
                 className="form-control"
                 value={formData.fullName}
                 onChange={handleChange}
-                placeholder="Your full name"
+                placeholder="Example: Alex Morgan"
                 autoComplete="name"
                 required
               />
@@ -317,7 +337,7 @@ const Register = () => {
                 className="form-control"
                 value={formData.email}
                 onChange={handleChange}
-                placeholder="you@email.com"
+                placeholder="admin@example.com"
                 autoComplete="email"
                 required
                 readOnly={isInviteRegistration}
@@ -375,7 +395,7 @@ const Register = () => {
                 ? "Creating account..."
                 : isInviteRegistration
                 ? "Create Account & Join Team"
-                : "Create Account"}
+                : "Create Admin Account"}
             </button>
           </form>
         )}
