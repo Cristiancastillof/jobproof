@@ -1,30 +1,26 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
 const AuthContext = createContext(null);
 
-const formatRole = (role) => {
-  if (!role) return "User";
-
-  return role.charAt(0).toUpperCase() + role.slice(1);
+const roleLabels = {
+  admin: "Admin",
+  supervisor: "Supervisor",
+  worker: "Worker",
 };
 
-const getUserId = (userOrId) => {
-  if (!userOrId) return null;
+const getUserDisplayName = (user, profile) => {
+  if (profile?.full_name) return profile.full_name;
+  if (user?.user_metadata?.full_name) return user.user_metadata.full_name;
+  if (user?.email) return user.email.split("@")[0];
 
-  if (typeof userOrId === "string") {
-    return userOrId;
-  }
-
-  return userOrId.id || null;
+  return "User";
 };
 
-const getFallbackFullName = (currentUser) => {
-  return (
-    currentUser?.user_metadata?.full_name ||
-    currentUser?.email?.split("@")[0] ||
-    "User"
-  );
+const getRoleLabel = (profile) => {
+  if (!profile?.role) return "User";
+
+  return roleLabels[profile.role] || "User";
 };
 
 export const AuthProvider = ({ children }) => {
@@ -34,33 +30,28 @@ export const AuthProvider = ({ children }) => {
   const [authLoading, setAuthLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
 
-  const createMissingProfile = async (currentUser) => {
-    if (!currentUser?.id) return null;
+  const createMissingAdminProfile = async (currentUser) => {
+    const fullName =
+      currentUser?.user_metadata?.full_name ||
+      currentUser?.email?.split("@")[0] ||
+      "Admin user";
 
-    const { data, error } = await supabase
-      .from("profiles")
-      .insert({
-        id: currentUser.id,
-        full_name: getFallbackFullName(currentUser),
-        email: currentUser.email || "",
-        role: "admin",
-        active: true,
-      })
-      .select("id, company_id, full_name, email, role, active")
-      .single();
+    const { data, error } = await supabase.rpc(
+      "create_admin_profile_for_current_user",
+      {
+        full_name_input: fullName,
+      }
+    );
 
     if (error) {
-      console.error("Error creating missing profile:", error);
-      return null;
+      throw error;
     }
 
     return data;
   };
 
-  const fetchProfile = async (userOrId) => {
-    const userId = getUserId(userOrId);
-
-    if (!userId) {
+  const fetchProfile = async (currentUser = user) => {
+    if (!currentUser?.id) {
       setProfile(null);
       setProfileLoading(false);
       return null;
@@ -71,26 +62,36 @@ export const AuthProvider = ({ children }) => {
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, company_id, full_name, email, role, active")
-        .eq("id", userId)
+        .select(
+          `
+          id,
+          company_id,
+          full_name,
+          email,
+          role,
+          active,
+          created_at,
+          updated_at
+        `
+        )
+        .eq("id", currentUser.id)
         .maybeSingle();
 
       if (error) {
-        console.error("Error fetching profile:", error);
-        setProfile(null);
-        return null;
+        throw error;
       }
 
-      if (!data && typeof userOrId !== "string") {
-        const newProfile = await createMissingProfile(userOrId);
-        setProfile(newProfile);
-        return newProfile;
+      if (!data) {
+        const createdProfile = await createMissingAdminProfile(currentUser);
+        setProfile(createdProfile);
+        return createdProfile;
       }
 
-      setProfile(data || null);
-      return data || null;
+      setProfile(data);
+      return data;
     } catch (error) {
-      console.error("Unexpected profile error:", error);
+      console.error("Error loading user profile:", error);
+
       setProfile(null);
       return null;
     } finally {
@@ -101,12 +102,14 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     let isMounted = true;
 
-    const getInitialSession = async () => {
+    const loadSession = async () => {
+      setAuthLoading(true);
+
       try {
         const { data, error } = await supabase.auth.getSession();
 
         if (error) {
-          console.error("Error getting Supabase session:", error);
+          throw error;
         }
 
         if (!isMounted) return;
@@ -116,19 +119,14 @@ export const AuthProvider = ({ children }) => {
 
         setSession(currentSession);
         setUser(currentUser);
-
-        if (currentUser) {
-          await fetchProfile(currentUser);
-        } else {
-          setProfile(null);
-          setProfileLoading(false);
-        }
       } catch (error) {
-        console.error("Unexpected auth error:", error);
-        setSession(null);
-        setUser(null);
-        setProfile(null);
-        setProfileLoading(false);
+        console.error("Error loading auth session:", error);
+
+        if (isMounted) {
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+        }
       } finally {
         if (isMounted) {
           setAuthLoading(false);
@@ -136,24 +134,21 @@ export const AuthProvider = ({ children }) => {
       }
     };
 
-    getInitialSession();
+    loadSession();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, currentSession) => {
-      const currentUser = currentSession?.user || null;
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      const currentUser = newSession?.user || null;
 
-      setSession(currentSession);
+      setSession(newSession);
       setUser(currentUser);
+      setAuthLoading(false);
 
-      if (currentUser) {
-        fetchProfile(currentUser);
-      } else {
+      if (!currentUser) {
         setProfile(null);
         setProfileLoading(false);
       }
-
-      setAuthLoading(false);
     });
 
     return () => {
@@ -162,11 +157,22 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
+  useEffect(() => {
+    if (authLoading) return;
+
+    if (!user?.id) {
+      setProfile(null);
+      setProfileLoading(false);
+      return;
+    }
+
+    fetchProfile(user);
+  }, [authLoading, user?.id]);
+
   const signOut = async () => {
     const { error } = await supabase.auth.signOut();
 
     if (error) {
-      console.error("Error signing out:", error);
       throw error;
     }
 
@@ -176,26 +182,23 @@ export const AuthProvider = ({ children }) => {
     setProfileLoading(false);
   };
 
-  const displayName =
-    profile?.full_name ||
-    user?.user_metadata?.full_name ||
-    user?.email?.split("@")[0] ||
-    "User";
+  const value = useMemo(() => {
+    const displayName = getUserDisplayName(user, profile);
+    const displayRole = getRoleLabel(profile);
 
-  const displayRole = formatRole(profile?.role);
-
-  const value = {
-    session,
-    user,
-    profile,
-    authLoading,
-    profileLoading,
-    isAuthenticated: Boolean(user),
-    displayName,
-    displayRole,
-    signOut,
-    fetchProfile,
-  };
+    return {
+      session,
+      user,
+      profile,
+      authLoading,
+      profileLoading,
+      isAuthenticated: Boolean(session?.user),
+      displayName,
+      displayRole,
+      fetchProfile,
+      signOut,
+    };
+  }, [session, user, profile, authLoading, profileLoading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
@@ -204,8 +207,10 @@ export const useAuth = () => {
   const context = useContext(AuthContext);
 
   if (!context) {
-    throw new Error("useAuth must be used inside an AuthProvider");
+    throw new Error("useAuth must be used inside AuthProvider");
   }
 
   return context;
 };
+
+export default AuthContext;
