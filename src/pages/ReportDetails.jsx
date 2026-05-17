@@ -1,36 +1,53 @@
-import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import ReportPreview from "../components/ReportPreview";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 import { generatePDF } from "../utils/generatePDF";
 
-const getTodayDate = () => {
-  return new Date().toISOString().split("T")[0];
+const formatStatusLabel = (status) => {
+  if (!status) return "Pending";
+  return status.charAt(0).toUpperCase() + status.slice(1);
 };
 
-const getStatusLabel = (status) => {
-  if (status === "pending") return "Pending";
-  if (status === "checked") return "Checked";
-  if (status === "completed") return "Completed";
+const buildMailtoLink = (reportData) => {
+  const email = reportData.clientEmail || "";
+  const clientName =
+    reportData.clientContactPerson ||
+    reportData.clientDisplayName ||
+    reportData.clientName ||
+    "there";
 
-  return "Pending";
+  const subject = `Job report ${reportData.reportNumber || ""}`.trim();
+
+  const body = [
+    `Hi ${clientName},`,
+    "",
+    `Your job report has been completed.`,
+    "",
+    `Report number: ${reportData.reportNumber || "Not provided"}`,
+    `Job address: ${
+      reportData.clientAddressSnapshot || reportData.jobAddress || "Not provided"
+    }`,
+    `Service: ${reportData.serviceType || "Not provided"}`,
+    "",
+    "Please find the report details attached or shared by our team.",
+    "",
+    `Regards,`,
+    `${reportData.businessName || "JobProof"}`,
+  ].join("\n");
+
+  return `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(
+    subject
+  )}&body=${encodeURIComponent(body)}`;
 };
 
-const getStatusBadgeClass = (status) => {
-  if (status === "completed") return "bg-success";
-  if (status === "checked") return "bg-primary";
-  if (status === "pending") return "bg-warning text-dark";
-
-  return "bg-secondary";
-};
-
-const mapSupabaseReportToPreview = ({
+const mapReportToPreviewData = ({
   report,
   company,
-  creator,
-  photos = [],
-  teamInvolved = [],
+  photos,
+  teamInvolved,
+  displayName,
 }) => {
   const beforePhotos = photos
     .filter((photo) => photo.photo_type === "before")
@@ -43,26 +60,39 @@ const mapSupabaseReportToPreview = ({
     .map((photo) => photo.photo_url);
 
   return {
-    id: report.id || "",
+    id: report.id,
     reportNumber: report.report_number || "",
     businessName: company?.business_name || "",
     businessEmail: company?.business_email || "",
     businessPhone: company?.business_phone || "",
     businessLogo: company?.business_logo_url || "",
-    workerName: creator?.full_name || "Unknown user",
+    workerName: displayName || "",
     createdBy: report.created_by || "",
-    teamInvolved,
-    clientName: report.client_name || "",
-    jobAddress: report.job_address || "",
-    jobDate: report.job_date || getTodayDate(),
-    startingHour: report.starting_hour ? report.starting_hour.slice(0, 5) : "",
-    finishHour: report.finish_hour ? report.finish_hour.slice(0, 5) : "",
+
+    clientId: report.client_id || "",
+    clientDisplayName: report.client_display_name || report.client_name || "",
+    clientCompanyName: report.client_company_name || "",
+    clientContactPerson: report.client_contact_person || "",
+    clientEmail: report.client_email || "",
+    clientPhone: report.client_phone || "",
+    clientAddressSnapshot:
+      report.client_address_snapshot || report.job_address || "",
+    clientAccessNotes: report.client_access_notes || "",
+
+    clientName: report.client_name || report.client_display_name || "",
+    jobAddress: report.job_address || report.client_address_snapshot || "",
+    jobDate: report.job_date || "",
+    startingHour: report.starting_hour
+      ? String(report.starting_hour).slice(0, 5)
+      : "",
+    finishHour: report.finish_hour ? String(report.finish_hour).slice(0, 5) : "",
     totalHours: report.total_hours || "",
     serviceType: report.service_type || "",
     workCompleted: report.work_completed || "",
     issuesFound: report.issues_found || "",
     recommendations: report.recommendations || "",
     status: report.status || "pending",
+    teamInvolved,
     beforePhotos,
     afterPhotos,
     createdAt: report.created_at || "",
@@ -72,27 +102,33 @@ const mapSupabaseReportToPreview = ({
 
 const ReportDetails = () => {
   const { id } = useParams();
-  const { user, profile, profileLoading } = useAuth();
+  const navigate = useNavigate();
+  const { user, profile, displayName, profileLoading } = useAuth();
 
   const [reportData, setReportData] = useState(null);
   const [loadingReport, setLoadingReport] = useState(true);
   const [message, setMessage] = useState(null);
 
-  const canEditReport =
-    profile?.role === "admin" ||
-    profile?.role === "supervisor" ||
-    reportData?.createdBy === user?.id;
+  const canEditReport = useMemo(() => {
+    if (!reportData || !profile || !user) return false;
+
+    return (
+      profile.role === "admin" ||
+      profile.role === "supervisor" ||
+      reportData.createdBy === user.id
+    );
+  }, [reportData, profile, user]);
+
+  const canSendToClient = useMemo(() => {
+    return reportData?.status === "completed" && reportData?.clientEmail;
+  }, [reportData]);
 
   useEffect(() => {
-    const loadReport = async () => {
+    const loadReportDetails = async () => {
       if (profileLoading) return;
 
       if (!user?.id || !profile?.company_id) {
         setLoadingReport(false);
-        setMessage({
-          type: "warning",
-          text: "You need a company profile to view reports.",
-        });
         return;
       }
 
@@ -111,58 +147,52 @@ const ReportDetails = () => {
           throw reportError;
         }
 
-        const [
-          { data: company, error: companyError },
-          { data: creator, error: creatorError },
-          { data: photos, error: photosError },
-          { data: reportWorkers, error: workersError },
-        ] = await Promise.all([
-          supabase
-            .from("companies")
-            .select(
-              "id, business_name, business_email, business_phone, business_logo_url"
-            )
-            .eq("id", report.company_id)
-            .single(),
+        const { data: company, error: companyError } = await supabase
+          .from("companies")
+          .select(
+            "id, business_name, business_email, business_phone, business_logo_url"
+          )
+          .eq("id", profile.company_id)
+          .single();
 
-          supabase
-            .from("profiles")
-            .select("id, full_name, email, role")
-            .eq("id", report.created_by)
-            .single(),
+        if (companyError) {
+          throw companyError;
+        }
 
-          supabase
-            .from("report_photos")
-            .select("id, photo_type, photo_url, photo_order")
-            .eq("report_id", report.id)
-            .eq("company_id", profile.company_id)
-            .order("photo_order", { ascending: true }),
+        const { data: photos, error: photosError } = await supabase
+          .from("report_photos")
+          .select("id, photo_type, photo_url, photo_order")
+          .eq("report_id", id)
+          .eq("company_id", profile.company_id)
+          .order("photo_order", { ascending: true });
 
-          supabase
-            .from("report_workers")
-            .select(
-              `
-              id,
-              profile_id,
-              role_on_job,
-              profiles:profile_id (
-                id,
-                full_name,
-                email,
-                role
-              )
+        if (photosError) {
+          throw photosError;
+        }
+
+        const { data: reportWorkers, error: workersError } = await supabase
+          .from("report_workers")
+          .select(
             `
+            id,
+            profile_id,
+            role_on_job,
+            profiles:profile_id (
+              id,
+              full_name,
+              email,
+              role
             )
-            .eq("report_id", report.id)
-            .eq("company_id", profile.company_id),
-        ]);
+          `
+          )
+          .eq("report_id", id)
+          .eq("company_id", profile.company_id);
 
-        if (companyError) throw companyError;
-        if (creatorError) throw creatorError;
-        if (photosError) throw photosError;
-        if (workersError) throw workersError;
+        if (workersError) {
+          throw workersError;
+        }
 
-        const mappedTeamInvolved = (reportWorkers || [])
+        const teamInvolved = (reportWorkers || [])
           .map((worker) => ({
             id: worker.profiles?.id || worker.profile_id,
             fullName: worker.profiles?.full_name || "Unknown user",
@@ -176,26 +206,13 @@ const ReportDetails = () => {
             return a.fullName.localeCompare(b.fullName);
           });
 
-        const finalTeamInvolved =
-          mappedTeamInvolved.length > 0
-            ? mappedTeamInvolved
-            : [
-                {
-                  id: creator.id,
-                  fullName: creator.full_name || "Unknown user",
-                  email: creator.email || "",
-                  role: creator.role || "worker",
-                  roleOnJob: "lead",
-                },
-              ];
-
         setReportData(
-          mapSupabaseReportToPreview({
+          mapReportToPreviewData({
             report,
             company,
-            creator,
             photos: photos || [],
-            teamInvolved: finalTeamInvolved,
+            teamInvolved,
+            displayName,
           })
         );
       } catch (error) {
@@ -212,15 +229,10 @@ const ReportDetails = () => {
       }
     };
 
-    loadReport();
-  }, [id, user, profile, profileLoading]);
+    loadReportDetails();
+  }, [id, user, profile, profileLoading, displayName]);
 
-  const handleDownloadPDF = () => {
-    if (!reportData) return;
-    generatePDF(reportData);
-  };
-
-  if (loadingReport || profileLoading) {
+  if (profileLoading || loadingReport) {
     return (
       <section className="py-5 text-center">
         <div className="spinner-border text-primary mb-3" role="status">
@@ -247,7 +259,7 @@ const ReportDetails = () => {
 
             <p className="text-muted mb-4">
               {message?.text ||
-                "This report could not be found or you do not have access to it."}
+                "This report could not be found or you do not have permission to view it."}
             </p>
 
             <Link to="/reports" className="btn btn-primary">
@@ -270,49 +282,63 @@ const ReportDetails = () => {
               {reportData.reportNumber || "Job report"}
             </h1>
 
-            <span
-              className={`badge ${getStatusBadgeClass(reportData.status)} text-capitalize`}
-            >
-              {getStatusLabel(reportData.status)}
+            <span className={`report-status-badge ${reportData.status}`}>
+              {formatStatusLabel(reportData.status)}
             </span>
           </div>
 
           <p className="section-subtitle mb-0">
-            View, download or edit this saved JobProof report.
+            Full client, job, team, status and photo details.
           </p>
         </div>
 
-        <div className="d-flex gap-2 flex-wrap">
-          <Link to="/reports" className="btn btn-outline-secondary">
-            Back to Reports
-          </Link>
-
+        <div className="d-flex flex-wrap gap-2">
           {canEditReport && (
-            <Link
-              to={`/edit-report/${reportData.id}`}
-              className="btn btn-primary"
+            <button
+              type="button"
+              className="btn btn-outline-primary"
+              onClick={() => navigate(`/edit-report/${reportData.id}`)}
             >
               Edit Report
-            </Link>
+            </button>
           )}
 
-          <button className="btn btn-success" onClick={handleDownloadPDF}>
+          <button
+            type="button"
+            className="btn btn-success"
+            onClick={() => generatePDF(reportData)}
+          >
             Download PDF
           </button>
+
+          {canSendToClient && (
+            <a
+              className="btn btn-primary"
+              href={buildMailtoLink(reportData)}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Send Report to Client
+            </a>
+          )}
         </div>
       </div>
 
-      {message && message.type !== "danger" && (
-        <div className={`alert alert-${message.type}`} role="alert">
-          {message.text}
+      {reportData.status === "completed" && !reportData.clientEmail && (
+        <div className="alert alert-warning">
+          This report is completed, but no client email is saved. Add a client
+          email before sending the report.
         </div>
       )}
 
-      <div className="row justify-content-center">
-        <div className="col-lg-9 col-xl-8">
-          <ReportPreview reportData={reportData} />
+      {reportData.status !== "completed" && (
+        <div className="alert alert-light border">
+          The send option will appear when the report status is{" "}
+          <strong>Completed</strong>.
         </div>
-      </div>
+      )}
+
+      <ReportPreview reportData={reportData} />
     </section>
   );
 };

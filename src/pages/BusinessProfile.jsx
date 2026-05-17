@@ -3,34 +3,21 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 
-const BUSINESS_PROFILE_KEY = "jobproofBusinessProfile";
 const BUSINESS_LOGOS_BUCKET = "business-logos";
 
-const emptyBusinessProfile = {
+const createEmptyForm = () => ({
   businessName: "",
   businessEmail: "",
   businessPhone: "",
-  businessLogo: "",
-  workerName: "",
-};
-
-const getLocalBusinessProfile = () => {
-  try {
-    return (
-      JSON.parse(localStorage.getItem(BUSINESS_PROFILE_KEY)) ||
-      emptyBusinessProfile
-    );
-  } catch (error) {
-    console.error("Error reading business profile from localStorage:", error);
-    return emptyBusinessProfile;
-  }
-};
+  businessLogoUrl: "",
+  displayName: "",
+});
 
 const BusinessProfile = () => {
-  const { user, profile, profileLoading, fetchProfile } = useAuth();
+  const { user, profile, displayName, displayRole, profileLoading, fetchProfile } =
+    useAuth();
 
-  const [businessProfile, setBusinessProfile] = useState(emptyBusinessProfile);
-  const [companyId, setCompanyId] = useState(null);
+  const [formData, setFormData] = useState(createEmptyForm);
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState("");
   const [loadingProfile, setLoadingProfile] = useState(true);
@@ -38,28 +25,35 @@ const BusinessProfile = () => {
   const [message, setMessage] = useState(null);
 
   const isAdmin = profile?.role === "admin";
+  const hasCompany = Boolean(profile?.company_id);
 
   useEffect(() => {
     const loadBusinessProfile = async () => {
       if (profileLoading) return;
 
+      if (!user?.id) {
+        setLoadingProfile(false);
+        return;
+      }
+
+      if (!isAdmin) {
+        setLoadingProfile(false);
+        return;
+      }
+
       setLoadingProfile(true);
       setMessage(null);
+      setLogoFile(null);
+      setLogoPreview("");
 
       try {
-        const localProfile = getLocalBusinessProfile();
+        if (!profile?.company_id) {
+          const cleanForm = {
+            ...createEmptyForm(),
+            displayName: profile?.full_name || displayName || "",
+          };
 
-        setBusinessProfile({
-          ...emptyBusinessProfile,
-          ...localProfile,
-          workerName: profile?.full_name || localProfile.workerName || "",
-        });
-
-        setLogoPreview(localProfile.businessLogo || "");
-
-        if (!user?.id || !profile?.company_id) {
-          setCompanyId(null);
-          setLoadingProfile(false);
+          setFormData(cleanForm);
           return;
         }
 
@@ -75,28 +69,23 @@ const BusinessProfile = () => {
           throw error;
         }
 
-        const loadedProfile = {
-          businessName: data.business_name || "",
-          businessEmail: data.business_email || "",
-          businessPhone: data.business_phone || "",
-          businessLogo: data.business_logo_url || "",
-          workerName: profile?.full_name || "",
-        };
+        setFormData({
+          businessName: data?.business_name || "",
+          businessEmail: data?.business_email || "",
+          businessPhone: data?.business_phone || "",
+          businessLogoUrl: data?.business_logo_url || "",
+          displayName: profile?.full_name || displayName || "",
+        });
 
-        setCompanyId(data.id);
-        setBusinessProfile(loadedProfile);
-        setLogoPreview(data.business_logo_url || "");
-
-        localStorage.setItem(
-          BUSINESS_PROFILE_KEY,
-          JSON.stringify(loadedProfile)
-        );
+        setLogoPreview(data?.business_logo_url || "");
       } catch (error) {
         console.error("Error loading business profile:", error);
 
         setMessage({
           type: "danger",
-          text: error.message || "There was an error loading your business profile.",
+          text:
+            error.message ||
+            "There was an error loading your Business Profile.",
         });
       } finally {
         setLoadingProfile(false);
@@ -104,17 +93,13 @@ const BusinessProfile = () => {
     };
 
     loadBusinessProfile();
-  }, [user, profile, profileLoading]);
-
-  const showMessage = (type, text) => {
-    setMessage({ type, text });
-  };
+  }, [user, profile, profileLoading, displayName, isAdmin]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
 
-    setBusinessProfile((currentProfile) => ({
-      ...currentProfile,
+    setFormData((currentForm) => ({
+      ...currentForm,
       [name]: value,
     }));
   };
@@ -128,15 +113,26 @@ const BusinessProfile = () => {
     setLogoPreview(URL.createObjectURL(file));
   };
 
-  const uploadBusinessLogo = async (currentCompanyId) => {
-    if (!logoFile) {
-      return businessProfile.businessLogo || "";
+  const getFileExtension = (file) => {
+    const extension = file.name?.split(".").pop();
+
+    if (extension && extension.length <= 5) {
+      return extension.toLowerCase();
     }
 
-    const fileExtension =
-      logoFile.name?.split(".").pop()?.toLowerCase() || "jpg";
+    if (file.type === "image/png") return "png";
+    if (file.type === "image/webp") return "webp";
 
-    const filePath = `${currentCompanyId}/business-logo-${Date.now()}.${fileExtension}`;
+    return "jpg";
+  };
+
+  const uploadLogo = async (companyId) => {
+    if (!logoFile) {
+      return formData.businessLogoUrl || "";
+    }
+
+    const extension = getFileExtension(logoFile);
+    const filePath = `${companyId}/business-logo-${Date.now()}.${extension}`;
 
     const { error: uploadError } = await supabase.storage
       .from(BUSINESS_LOGOS_BUCKET)
@@ -157,28 +153,34 @@ const BusinessProfile = () => {
     return data.publicUrl;
   };
 
-  const saveLocalProfile = (profileToSave) => {
-    localStorage.setItem(BUSINESS_PROFILE_KEY, JSON.stringify(profileToSave));
+  const validateForm = () => {
+    if (!formData.businessName.trim()) {
+      return "Please enter your business name.";
+    }
+
+    if (!formData.displayName.trim()) {
+      return "Please enter your display name.";
+    }
+
+    return null;
   };
 
-  const handleSaveProfile = async (event) => {
-    event.preventDefault();
+  const handleSaveProfile = async () => {
+    const validationError = validateForm();
 
-    if (!isAdmin) {
-      showMessage(
-        "warning",
-        "Only company admins can update the Business Profile."
-      );
+    if (validationError) {
+      setMessage({
+        type: "warning",
+        text: validationError,
+      });
       return;
     }
 
-    if (!user?.id) {
-      showMessage("warning", "Please log in before saving your profile.");
-      return;
-    }
-
-    if (!businessProfile.businessName.trim()) {
-      showMessage("warning", "Please enter your business name.");
+    if (!user?.id || !profile?.id) {
+      setMessage({
+        type: "danger",
+        text: "Your user profile is not ready yet. Please log in again.",
+      });
       return;
     }
 
@@ -186,109 +188,108 @@ const BusinessProfile = () => {
     setMessage(null);
 
     try {
-      let currentCompanyId = companyId || profile?.company_id || null;
-      let logoUrl = businessProfile.businessLogo || "";
+      let companyId = profile.company_id;
 
-      if (!currentCompanyId) {
-        const { data: newCompany, error: companyInsertError } = await supabase
+      if (!companyId) {
+        const { data: createdCompany, error: createError } = await supabase
           .from("companies")
           .insert({
-            owner_id: user.id,
-            business_name: businessProfile.businessName,
-            business_email: businessProfile.businessEmail,
-            business_phone: businessProfile.businessPhone,
+            business_name: formData.businessName.trim(),
+            business_email: formData.businessEmail.trim(),
+            business_phone: formData.businessPhone.trim(),
             business_logo_url: "",
+            owner_id: user.id,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
           })
           .select("id")
           .single();
 
-        if (companyInsertError) {
-          throw companyInsertError;
+        if (createError) {
+          throw createError;
         }
 
-        currentCompanyId = newCompany.id;
+        companyId = createdCompany.id;
       }
 
-      logoUrl = await uploadBusinessLogo(currentCompanyId);
+      const logoUrl = await uploadLogo(companyId);
 
-      const { error: companyUpdateError } = await supabase
+      const { error: companyError } = await supabase
         .from("companies")
         .update({
-          business_name: businessProfile.businessName,
-          business_email: businessProfile.businessEmail,
-          business_phone: businessProfile.businessPhone,
+          business_name: formData.businessName.trim(),
+          business_email: formData.businessEmail.trim(),
+          business_phone: formData.businessPhone.trim(),
           business_logo_url: logoUrl,
+          owner_id: user.id,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", currentCompanyId);
+        .eq("id", companyId);
 
-      if (companyUpdateError) {
-        throw companyUpdateError;
+      if (companyError) {
+        throw companyError;
       }
 
-      const { error: profileUpdateError } = await supabase
+      const { error: profileError } = await supabase
         .from("profiles")
         .update({
-          company_id: currentCompanyId,
-          full_name:
-            businessProfile.workerName.trim() ||
-            profile?.full_name ||
-            user.email?.split("@")[0] ||
-            "User",
+          company_id: companyId,
+          full_name: formData.displayName.trim(),
+          email: profile.email || user.email,
+          role: "admin",
+          active: true,
           updated_at: new Date().toISOString(),
         })
         .eq("id", user.id);
 
-      if (profileUpdateError) {
-        throw profileUpdateError;
+      if (profileError) {
+        throw profileError;
       }
 
-      const savedProfile = {
-        ...businessProfile,
-        businessLogo: logoUrl,
-        workerName:
-          businessProfile.workerName.trim() ||
-          profile?.full_name ||
-          user.email?.split("@")[0] ||
-          "User",
-      };
+      setFormData((currentForm) => ({
+        ...currentForm,
+        businessLogoUrl: logoUrl,
+      }));
 
-      setCompanyId(currentCompanyId);
-      setBusinessProfile(savedProfile);
       setLogoPreview(logoUrl);
       setLogoFile(null);
-      saveLocalProfile(savedProfile);
 
-      await fetchProfile(user);
+      if (fetchProfile) {
+        await fetchProfile(user);
+      }
 
-      showMessage(
-        "success",
-        "Business Profile saved successfully. Your reports will now use this company information automatically."
-      );
+      setMessage({
+        type: "success",
+        text: "Business Profile saved successfully.",
+      });
     } catch (error) {
       console.error("Error saving business profile:", error);
 
-      showMessage(
-        "danger",
-        error.message ||
-          "There was an error saving the business profile. Please try again."
-      );
+      setMessage({
+        type: "danger",
+        text:
+          error.message ||
+          "There was an error saving your Business Profile. Please try again.",
+      });
     } finally {
       setSavingProfile(false);
     }
   };
 
-  const handleClearProfile = () => {
+  const handleClearForm = () => {
     const confirmClear = window.confirm(
-      "Are you sure you want to clear this form? This will only clear the current form and local copy, not the company saved in Supabase."
+      "Clear the current form? This will not delete a saved company from Supabase."
     );
 
     if (!confirmClear) return;
 
-    setBusinessProfile(emptyBusinessProfile);
+    setFormData({
+      ...createEmptyForm(),
+      displayName: profile?.full_name || displayName || "",
+    });
+
     setLogoFile(null);
     setLogoPreview("");
-    localStorage.removeItem(BUSINESS_PROFILE_KEY);
     setMessage(null);
   };
 
@@ -299,44 +300,16 @@ const BusinessProfile = () => {
           <span className="visually-hidden">Loading...</span>
         </div>
 
-        <h1 className="h5">Loading business profile</h1>
+        <h1 className="h5">Loading Business Profile</h1>
 
         <p className="text-muted mb-0">
-          Please wait while JobProof loads your company information.
+          Please wait while JobProof prepares your company setup.
         </p>
       </section>
     );
   }
 
-  if (!user) {
-    return (
-      <section className="py-5">
-        <div className="card shadow-sm border-0">
-          <div className="card-body p-4 p-md-5 text-center">
-            <p className="eyebrow mb-2">Business Profile</p>
-
-            <h1 className="h3 mb-3">Log in required</h1>
-
-            <p className="text-muted mb-4">
-              Please log in before setting up your company profile.
-            </p>
-
-            <div className="d-flex justify-content-center gap-2 flex-wrap">
-              <Link to="/login" className="btn btn-primary">
-                Log in
-              </Link>
-
-              <Link to="/register" className="btn btn-outline-primary">
-                Create account
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  if (profile && !isAdmin) {
+  if (!isAdmin) {
     return (
       <section className="py-5">
         <div className="card shadow-sm border-0">
@@ -346,12 +319,12 @@ const BusinessProfile = () => {
             <h1 className="h3 mb-3">Admin access required</h1>
 
             <p className="text-muted mb-4">
-              Only company admins can update the Business Profile. Your account
-              can still create and manage job reports based on your role.
+              Only company admins can manage the Business Profile. Your current
+              role is {displayRole}.
             </p>
 
-            <Link to="/reports" className="btn btn-primary">
-              Back to Reports
+            <Link to="/" className="btn btn-primary">
+              Back to Dashboard
             </Link>
           </div>
         </div>
@@ -361,7 +334,7 @@ const BusinessProfile = () => {
 
   return (
     <section>
-      <div className="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4">
+      <div className="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
         <div>
           <p className="eyebrow mb-2">Company setup</p>
 
@@ -373,7 +346,7 @@ const BusinessProfile = () => {
           </p>
         </div>
 
-        <div className="desktop-report-actions d-flex gap-2 flex-wrap">
+        <div className="d-flex gap-2 flex-wrap">
           <button
             type="button"
             className="btn btn-primary"
@@ -386,7 +359,7 @@ const BusinessProfile = () => {
           <button
             type="button"
             className="btn btn-outline-danger"
-            onClick={handleClearProfile}
+            onClick={handleClearForm}
             disabled={savingProfile}
           >
             Clear Form
@@ -394,22 +367,22 @@ const BusinessProfile = () => {
         </div>
       </div>
 
+      {!hasCompany && (
+        <div className="alert alert-warning" role="alert">
+          <strong>No company connected yet.</strong> Saving this form will
+          create one and connect it to your admin profile.
+        </div>
+      )}
+
       {message && (
         <div className={`alert alert-${message.type}`} role="alert">
           {message.text}
         </div>
       )}
 
-      {!companyId && (
-        <div className="alert alert-warning" role="alert">
-          <strong>No company connected yet.</strong> Saving this form will create
-          one and connect it to your admin profile.
-        </div>
-      )}
-
       <div className="row g-4">
         <div className="col-lg-7">
-          <form className="card shadow-sm border-0" onSubmit={handleSaveProfile}>
+          <div className="card shadow-sm border-0">
             <div className="card-body p-4">
               <h2 className="h4 mb-4">Company information</h2>
 
@@ -421,9 +394,9 @@ const BusinessProfile = () => {
                 <input
                   id="businessName"
                   type="text"
-                  className="form-control"
                   name="businessName"
-                  value={businessProfile.businessName}
+                  className="form-control"
+                  value={formData.businessName}
                   onChange={handleChange}
                   placeholder="Example: CleanPro Services"
                 />
@@ -437,9 +410,9 @@ const BusinessProfile = () => {
                 <input
                   id="businessEmail"
                   type="email"
-                  className="form-control"
                   name="businessEmail"
-                  value={businessProfile.businessEmail}
+                  className="form-control"
+                  value={formData.businessEmail}
                   onChange={handleChange}
                   placeholder="Example: admin@cleanpro.com.au"
                 />
@@ -452,28 +425,28 @@ const BusinessProfile = () => {
 
                 <input
                   id="businessPhone"
-                  type="tel"
-                  className="form-control"
+                  type="text"
                   name="businessPhone"
-                  value={businessProfile.businessPhone}
+                  className="form-control"
+                  value={formData.businessPhone}
                   onChange={handleChange}
                   placeholder="Example: 0400 000 000"
                 />
               </div>
 
               <div className="mb-3">
-                <label htmlFor="workerName" className="form-label">
+                <label htmlFor="displayName" className="form-label">
                   Your display name
                 </label>
 
                 <input
-                  id="workerName"
+                  id="displayName"
                   type="text"
+                  name="displayName"
                   className="form-control"
-                  name="workerName"
-                  value={businessProfile.workerName}
+                  value={formData.displayName}
                   onChange={handleChange}
-                  placeholder="Example: Cristian Castillo"
+                  placeholder="Example: Alex Morgan"
                 />
 
                 <small className="text-muted">
@@ -490,7 +463,7 @@ const BusinessProfile = () => {
                   id="businessLogo"
                   type="file"
                   className="form-control"
-                  accept="image/*"
+                  accept="image/png, image/jpeg, image/jpg, image/webp"
                   onChange={handleLogoChange}
                 />
 
@@ -501,8 +474,9 @@ const BusinessProfile = () => {
 
               <div className="d-flex gap-2 flex-wrap">
                 <button
-                  type="submit"
+                  type="button"
                   className="btn btn-primary"
+                  onClick={handleSaveProfile}
                   disabled={savingProfile}
                 >
                   {savingProfile ? "Saving..." : "Save Profile"}
@@ -511,69 +485,63 @@ const BusinessProfile = () => {
                 <button
                   type="button"
                   className="btn btn-outline-danger"
-                  onClick={handleClearProfile}
+                  onClick={handleClearForm}
                   disabled={savingProfile}
                 >
                   Clear Form
                 </button>
               </div>
             </div>
-          </form>
+          </div>
         </div>
 
         <div className="col-lg-5">
-          <div className="card shadow-sm border-0">
+          <div className="card shadow-sm border-0 mb-4">
             <div className="card-body p-4">
               <h2 className="h4 mb-4">Profile preview</h2>
 
-              <div className="business-profile-preview">
-                <div className="business-logo-preview mb-3">
-                  {logoPreview ? (
-                    <img
-                      src={logoPreview}
-                      alt="Business logo preview"
-                      className="img-fluid rounded"
-                    />
-                  ) : (
-                    <div className="business-logo-placeholder">
-                      <span>No logo</span>
-                    </div>
-                  )}
+              {logoPreview ? (
+                <img
+                  src={logoPreview}
+                  alt="Business logo preview"
+                  className="business-profile-logo-preview mb-3"
+                />
+              ) : (
+                <div className="business-profile-logo-placeholder mb-3">
+                  No logo
                 </div>
+              )}
 
-                <h3 className="h5 mb-2">
-                  {businessProfile.businessName || "Your business name"}
-                </h3>
+              <h3 className="h5 mb-2">
+                {formData.businessName || "Your business name"}
+              </h3>
 
-                <p className="text-muted mb-2">
-                  {businessProfile.businessEmail || "business@email.com"}
-                </p>
+              <p className="text-muted mb-2">
+                {formData.businessEmail || "business@email.com"}
+              </p>
 
-                <p className="text-muted mb-2">
-                  {businessProfile.businessPhone || "Business phone"}
-                </p>
+              <p className="text-muted mb-4">
+                {formData.businessPhone || "Business phone"}
+              </p>
 
-                <hr />
+              <hr />
 
-                <p className="mb-1">
-                  <strong>Reports completed by:</strong>
-                </p>
+              <p className="fw-bold mb-2">Reports completed by:</p>
 
-                <p className="text-muted mb-0">
-                  {businessProfile.workerName || "Your display name"}
-                </p>
-              </div>
+              <p className="text-muted mb-0">
+                {formData.displayName || "Your display name"}
+              </p>
             </div>
           </div>
 
-          <div className="card shadow-sm border-0 mt-4">
+          <div className="card shadow-sm border-0">
             <div className="card-body p-4">
               <h2 className="h5 mb-3">How this works</h2>
 
-              <p className="text-muted mb-3">
-                This profile is used as your company source of truth. New reports
-                automatically include your business name, contact details and
-                logo.
+              <p className="text-muted">
+                This profile is used as your company source of truth. New
+                reports automatically include your business name, contact details
+                and logo.
               </p>
 
               <ul className="text-muted mb-0">
@@ -585,28 +553,8 @@ const BusinessProfile = () => {
           </div>
         </div>
       </div>
-
-      <div className="mobile-report-action-bar">
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={handleSaveProfile}
-          disabled={savingProfile}
-        >
-          {savingProfile ? "Saving..." : "Save"}
-        </button>
-
-        <button
-          type="button"
-          className="btn btn-outline-danger"
-          onClick={handleClearProfile}
-          disabled={savingProfile}
-        >
-          Clear
-        </button>
-      </div>
     </section>
   );
 };
 
-export default BusinessProfile;
+export default BusinessProfile; 

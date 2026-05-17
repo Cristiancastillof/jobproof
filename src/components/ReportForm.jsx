@@ -9,6 +9,8 @@ const ReportForm = ({
   selectedWorkerIds = [],
   setSelectedWorkerIds,
   statusOptions = [],
+  clients = [],
+  onSelectClient,
 }) => {
   const totalHours =
     reportData.totalHours ||
@@ -29,7 +31,21 @@ const ReportForm = ({
       );
     }
 
+    if (name === "clientName") {
+      updatedReportData.clientDisplayName = value;
+    }
+
+    if (name === "jobAddress") {
+      updatedReportData.clientAddressSnapshot = value;
+    }
+
     setReportData(updatedReportData);
+  };
+
+  const handleClientSelectChange = (event) => {
+    if (onSelectClient) {
+      onSelectClient(event.target.value);
+    }
   };
 
   const handleWorkerToggle = (workerId) => {
@@ -110,6 +126,77 @@ const ReportForm = ({
   const selectedStatusHelper =
     statusOptions.find((option) => option.value === reportData.status)?.helper ||
     "Select the current workflow status for this job.";
+
+  const selectedClient = clients.find(
+    (client) => client.id === reportData.clientId
+  );
+
+  const renderClientSelector = () => {
+    return (
+      <div className="mb-4">
+        <h3 className="h5 mb-3">Client / Job site</h3>
+
+        <div className="client-autofill-box">
+          <label htmlFor="clientId" className="form-label">
+            Search or select saved client
+          </label>
+
+          <select
+            id="clientId"
+            name="clientId"
+            className="form-select"
+            value={reportData.clientId || ""}
+            onChange={handleClientSelectChange}
+          >
+            <option value="">Manual entry / no saved client</option>
+
+            {clients.map((client) => (
+              <option key={client.id} value={client.id}>
+                {client.client_display_name}
+                {client.job_address ? ` — ${client.job_address}` : ""}
+              </option>
+            ))}
+          </select>
+
+          <small className="text-muted d-block mt-2">
+            Selecting a saved client will autofill the client name, address,
+            contact details and default service type.
+          </small>
+
+          {selectedClient && (
+            <div className="client-autofill-summary mt-3">
+              <div>
+                <span>Selected client</span>
+                <strong>{selectedClient.client_display_name}</strong>
+              </div>
+
+              <div>
+                <span>Email</span>
+                <strong>{selectedClient.email || "Not provided"}</strong>
+              </div>
+
+              <div>
+                <span>Phone</span>
+                <strong>{selectedClient.phone || "Not provided"}</strong>
+              </div>
+
+              <div>
+                <span>Access notes</span>
+                <strong>{selectedClient.access_notes || "Not provided"}</strong>
+              </div>
+            </div>
+          )}
+
+          {clients.length === 0 && (
+            <div className="alert alert-light border mt-3 mb-0">
+              No saved clients yet. Admins and supervisors can create clients
+              from the Clients page.
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const renderTeamSelector = () => {
     if (!teamMembers || teamMembers.length === 0) {
@@ -282,6 +369,8 @@ const ReportForm = ({
           )}
         </div>
 
+        {renderClientSelector()}
+
         <div className="mb-4">
           <h3 className="h5 mb-3">Client and job details</h3>
 
@@ -296,11 +385,73 @@ const ReportForm = ({
               name="clientName"
               value={reportData.clientName}
               onChange={handleChange}
-              placeholder="Example: John Smith"
+              placeholder="Example: Michael Turner"
             />
           </div>
 
           <div className="mb-3">
+            <label htmlFor="clientCompanyName" className="form-label">
+              Client company
+            </label>
+            <input
+              id="clientCompanyName"
+              type="text"
+              className="form-control"
+              name="clientCompanyName"
+              value={reportData.clientCompanyName}
+              onChange={handleChange}
+              placeholder="Example: Turner Property Group"
+            />
+          </div>
+
+          <div className="mb-3">
+            <label htmlFor="clientContactPerson" className="form-label">
+              Contact person
+            </label>
+            <input
+              id="clientContactPerson"
+              type="text"
+              className="form-control"
+              name="clientContactPerson"
+              value={reportData.clientContactPerson}
+              onChange={handleChange}
+              placeholder="Example: Michael Turner"
+            />
+          </div>
+
+          <div className="row g-3">
+            <div className="col-md-6">
+              <label htmlFor="clientEmail" className="form-label">
+                Client email
+              </label>
+              <input
+                id="clientEmail"
+                type="email"
+                className="form-control"
+                name="clientEmail"
+                value={reportData.clientEmail}
+                onChange={handleChange}
+                placeholder="client@example.com"
+              />
+            </div>
+
+            <div className="col-md-6">
+              <label htmlFor="clientPhone" className="form-label">
+                Client phone
+              </label>
+              <input
+                id="clientPhone"
+                type="text"
+                className="form-control"
+                name="clientPhone"
+                value={reportData.clientPhone}
+                onChange={handleChange}
+                placeholder="0400 000 000"
+              />
+            </div>
+          </div>
+
+          <div className="mt-3">
             <label htmlFor="jobAddress" className="form-label">
               Job address
             </label>
@@ -311,11 +462,26 @@ const ReportForm = ({
               name="jobAddress"
               value={reportData.jobAddress}
               onChange={handleChange}
-              placeholder="Example: 123 Collins Street, Melbourne"
+              placeholder="Example: 25 Collins Street, Melbourne VIC 3000"
             />
           </div>
 
-          <div className="mb-3">
+          <div className="mt-3">
+            <label htmlFor="clientAccessNotes" className="form-label">
+              Access notes
+            </label>
+            <textarea
+              id="clientAccessNotes"
+              className="form-control"
+              rows="3"
+              name="clientAccessNotes"
+              value={reportData.clientAccessNotes}
+              onChange={handleChange}
+              placeholder="Example: Key in lockbox. Parking available behind the building."
+            />
+          </div>
+
+          <div className="mt-3">
             <label htmlFor="jobDate" className="form-label">
               Job date
             </label>
@@ -329,7 +495,7 @@ const ReportForm = ({
             />
           </div>
 
-          <div className="row g-3">
+          <div className="row g-3 mt-1">
             <div className="col-md-6">
               <label htmlFor="startingHour" className="form-label">
                 Starting hour

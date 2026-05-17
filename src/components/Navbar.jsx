@@ -6,6 +6,8 @@ const Navbar = () => {
   const { isAuthenticated, displayName, displayRole, signOut } = useAuth();
 
   const isAdmin = displayRole === "Admin";
+  const isSupervisor = displayRole === "Supervisor";
+  const canManageClients = isAdmin || isSupervisor;
 
   const handleSignOut = async () => {
     try {
@@ -65,6 +67,14 @@ const Navbar = () => {
                   <li className="nav-item">
                     <NavLink to="/team" className={getNavLinkClass}>
                       Team
+                    </NavLink>
+                  </li>
+                )}
+
+                {canManageClients && (
+                  <li className="nav-item">
+                    <NavLink to="/clients" className={getNavLinkClass}>
+                      Clients
                     </NavLink>
                   </li>
                 )}

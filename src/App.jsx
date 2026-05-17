@@ -13,6 +13,7 @@ import BusinessProfile from "./pages/BusinessProfile";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Team from "./pages/Team";
+import Clients from "./pages/Clients";
 
 const HomeRoute = () => {
   const { isAuthenticated, authLoading } = useAuth();
@@ -23,7 +24,6 @@ const HomeRoute = () => {
         <div className="spinner-border text-primary mb-3" role="status">
           <span className="visually-hidden">Loading...</span>
         </div>
-
         <h1 className="h5">Loading JobProof</h1>
       </section>
     );
@@ -69,10 +69,10 @@ const App = () => {
           />
 
           <Route
-            path="/team"
+            path="/clients"
             element={
               <ProtectedRoute>
-                <Team />
+                <Clients />
               </ProtectedRoute>
             }
           />
@@ -109,6 +109,15 @@ const App = () => {
             element={
               <ProtectedRoute>
                 <ReportDetails />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/team"
+            element={
+              <ProtectedRoute>
+                <Team />
               </ProtectedRoute>
             }
           />

@@ -1,269 +1,213 @@
-const formatDate = (dateValue) => {
-  if (!dateValue) return "Not provided";
-
-  const date = new Date(`${dateValue}T00:00:00`);
-
-  if (Number.isNaN(date.getTime())) {
-    return dateValue;
-  }
-
-  return date.toLocaleDateString("en-AU", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+const formatValue = (value, fallback = "Not provided") => {
+  if (!value || String(value).trim() === "") return fallback;
+  return value;
 };
 
-const formatTime = (timeValue) => {
-  if (!timeValue) return "Not provided";
+const formatStatusLabel = (status) => {
+  if (!status) return "Pending";
 
-  return timeValue;
-};
-
-const getInitials = (name) => {
-  if (!name) return "U";
-
-  return name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part.charAt(0).toUpperCase())
-    .join("");
-};
-
-const getRoleLabel = (roleOnJob, role) => {
-  if (roleOnJob === "lead") return "Lead";
-  if (roleOnJob === "supervisor") return "Supervisor";
-  if (roleOnJob === "helper") return "Helper";
-
-  if (role === "admin") return "Admin";
-  if (role === "supervisor") return "Supervisor";
-
-  return "Worker";
-};
-
-const getStatusLabel = (status) => {
-  if (status === "pending") return "Pending";
-  if (status === "checked") return "Checked";
-  if (status === "completed") return "Completed";
-
-  return "Pending";
-};
-
-const getStatusClass = (status) => {
-  if (status === "completed") return "report-status-badge completed";
-  if (status === "checked") return "report-status-badge checked";
-  if (status === "pending") return "report-status-badge pending";
-
-  return "report-status-badge";
+  return status.charAt(0).toUpperCase() + status.slice(1);
 };
 
 const ReportPreview = ({ reportData }) => {
-  const beforePhotos = reportData.beforePhotos || [];
-  const afterPhotos = reportData.afterPhotos || [];
-  const teamInvolved = reportData.teamInvolved || [];
+  const status = reportData.status || "pending";
 
-  const hasTeamInvolved = teamInvolved.length > 0;
+  const hasClientContact =
+    reportData.clientCompanyName ||
+    reportData.clientContactPerson ||
+    reportData.clientEmail ||
+    reportData.clientPhone ||
+    reportData.clientAccessNotes;
+
+  const renderPhotos = (title, photos = []) => {
+    if (!photos.length) return null;
+
+    return (
+      <div className="report-preview-section">
+        <h4>{title}</h4>
+
+        <div className="report-preview-photos">
+          {photos.map((photo, index) => (
+            <div className="report-preview-photo-card" key={`${title}-${index}`}>
+              <span>{index + 1}</span>
+              <img src={photo} alt={`${title} ${index + 1}`} />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <div className="report-preview-wrapper">
-      <div className="report-preview-card">
-        <div className="report-preview-header">
-          <div>
-            <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
-              <p className="report-preview-eyebrow mb-0">Job Report</p>
+    <article className="report-preview-card">
+      <div className="report-preview-header">
+        <div>
+          <p className="eyebrow mb-2">Report preview</p>
 
-              <span className={getStatusClass(reportData.status)}>
-                {getStatusLabel(reportData.status)}
-              </span>
-            </div>
+          <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
+            <h2 className="mb-0">Job Report</h2>
 
-            <h2>{reportData.reportNumber || "Draft report"}</h2>
-
-            <p className="mb-0">
-              {reportData.businessName || "Business name not set"}
-            </p>
+            <span className={`report-status-badge ${status}`}>
+              {formatStatusLabel(status)}
+            </span>
           </div>
 
-          {reportData.businessLogo && (
-            <img
-              src={reportData.businessLogo}
-              alt={`${reportData.businessName || "Business"} logo`}
-              className="report-preview-logo"
-            />
-          )}
+          <p className="text-muted mb-0">
+            {formatValue(reportData.reportNumber, "Report number pending")}
+          </p>
         </div>
 
+        {reportData.businessLogo ? (
+          <img
+            src={reportData.businessLogo}
+            alt="Business logo"
+            className="report-preview-logo"
+          />
+        ) : (
+          <div className="report-preview-logo-placeholder">Logo</div>
+        )}
+      </div>
+
+      <div className="report-preview-business">
+        <h3>{formatValue(reportData.businessName, "Business name not set")}</h3>
+
+        <p>{formatValue(reportData.businessEmail, "Business email not set")}</p>
+
+        <p>{formatValue(reportData.businessPhone, "Business phone not set")}</p>
+      </div>
+
+      <div className="report-preview-section">
+        <h4>Client and job details</h4>
+
+        <div className="report-preview-grid">
+          <div>
+            <span>Status</span>
+            <strong>{formatStatusLabel(status)}</strong>
+          </div>
+
+          <div>
+            <span>Client</span>
+            <strong>
+              {formatValue(
+                reportData.clientDisplayName || reportData.clientName,
+                "Client not set"
+              )}
+            </strong>
+          </div>
+
+          <div>
+            <span>Job address</span>
+            <strong>
+              {formatValue(
+                reportData.clientAddressSnapshot || reportData.jobAddress,
+                "Address not set"
+              )}
+            </strong>
+          </div>
+
+          <div>
+            <span>Job date</span>
+            <strong>{formatValue(reportData.jobDate, "Date not set")}</strong>
+          </div>
+
+          <div>
+            <span>Start</span>
+            <strong>{formatValue(reportData.startingHour, "Not set")}</strong>
+          </div>
+
+          <div>
+            <span>Finish</span>
+            <strong>{formatValue(reportData.finishHour, "Not set")}</strong>
+          </div>
+
+          <div>
+            <span>Total hours</span>
+            <strong>{formatValue(reportData.totalHours, "0")}</strong>
+          </div>
+
+          <div>
+            <span>Service</span>
+            <strong>
+              {formatValue(reportData.serviceType, "Service type not set")}
+            </strong>
+          </div>
+        </div>
+      </div>
+
+      {hasClientContact && (
         <div className="report-preview-section">
-          <h3>Business details</h3>
+          <h4>Client profile</h4>
 
           <div className="report-preview-grid">
             <div>
-              <span>Business</span>
-              <strong>{reportData.businessName || "Not provided"}</strong>
+              <span>Company</span>
+              <strong>{formatValue(reportData.clientCompanyName)}</strong>
+            </div>
+
+            <div>
+              <span>Contact</span>
+              <strong>{formatValue(reportData.clientContactPerson)}</strong>
             </div>
 
             <div>
               <span>Email</span>
-              <strong>{reportData.businessEmail || "Not provided"}</strong>
+              <strong>{formatValue(reportData.clientEmail)}</strong>
             </div>
 
             <div>
               <span>Phone</span>
-              <strong>{reportData.businessPhone || "Not provided"}</strong>
-            </div>
-
-            <div>
-              <span>Created by</span>
-              <strong>{reportData.workerName || "Not provided"}</strong>
+              <strong>{formatValue(reportData.clientPhone)}</strong>
             </div>
           </div>
-        </div>
 
-        <div className="report-preview-section">
-          <h3>Client and job details</h3>
-
-          <div className="report-preview-grid">
-            <div>
-              <span>Status</span>
-              <strong>{getStatusLabel(reportData.status)}</strong>
-            </div>
-
-            <div>
-              <span>Client</span>
-              <strong>{reportData.clientName || "Not provided"}</strong>
-            </div>
-
-            <div>
-              <span>Job date</span>
-              <strong>{formatDate(reportData.jobDate)}</strong>
-            </div>
-
-            <div className="report-preview-grid-wide">
-              <span>Address</span>
-              <strong>{reportData.jobAddress || "Not provided"}</strong>
-            </div>
-
-            <div>
-              <span>Starting hour</span>
-              <strong>{formatTime(reportData.startingHour)}</strong>
-            </div>
-
-            <div>
-              <span>Finish hour</span>
-              <strong>{formatTime(reportData.finishHour)}</strong>
-            </div>
-
-            <div>
-              <span>Total hours</span>
-              <strong>{reportData.totalHours || "Not calculated"}</strong>
-            </div>
-
-            <div>
-              <span>Service type</span>
-              <strong>{reportData.serviceType || "Not provided"}</strong>
-            </div>
-          </div>
-        </div>
-
-        <div className="report-preview-section">
-          <div className="d-flex justify-content-between align-items-start gap-3 mb-3">
-            <div>
-              <h3 className="mb-1">Team involved</h3>
-              <p className="text-muted small mb-0">
-                People recorded as part of this job.
-              </p>
-            </div>
-
-            <span className="report-team-count">
-              {teamInvolved.length} people
-            </span>
-          </div>
-
-          {!hasTeamInvolved ? (
-            <div className="report-preview-empty">
-              No team members selected yet.
-            </div>
-          ) : (
-            <div className="report-team-list">
-              {teamInvolved.map((member) => (
-                <div className="report-team-member" key={member.id}>
-                  <span className="report-team-avatar">
-                    {getInitials(member.fullName)}
-                  </span>
-
-                  <span className="report-team-copy">
-                    <strong>{member.fullName || "Unnamed user"}</strong>
-                    <small>{getRoleLabel(member.roleOnJob, member.role)}</small>
-                  </span>
-                </div>
-              ))}
+          {reportData.clientAccessNotes && (
+            <div className="report-preview-note mt-3">
+              <span>Access notes</span>
+              <p>{reportData.clientAccessNotes}</p>
             </div>
           )}
         </div>
+      )}
 
+      {reportData.teamInvolved?.length > 0 && (
         <div className="report-preview-section">
-          <h3>Work notes</h3>
+          <h4>Team involved</h4>
 
-          <div className="report-preview-note">
-            <span>Work completed</span>
-            <p>{reportData.workCompleted || "Not provided"}</p>
-          </div>
-
-          <div className="report-preview-note">
-            <span>Issues found</span>
-            <p>{reportData.issuesFound || "Not provided"}</p>
-          </div>
-
-          <div className="report-preview-note">
-            <span>Recommendations</span>
-            <p>{reportData.recommendations || "Not provided"}</p>
+          <div className="report-preview-team-list">
+            {reportData.teamInvolved.map((member) => (
+              <div className="report-preview-team-member" key={member.id}>
+                <strong>{member.fullName}</strong>
+                <span>{member.roleOnJob || member.role || "worker"}</span>
+              </div>
+            ))}
           </div>
         </div>
+      )}
 
-        <div className="report-preview-section">
-          <h3>Photos</h3>
+      <div className="report-preview-section">
+        <h4>Work notes</h4>
 
-          <div className="report-photo-preview-block">
-            <h4>Before photos</h4>
-
-            {beforePhotos.length === 0 ? (
-              <p className="text-muted small mb-0">No before photos.</p>
-            ) : (
-              <div className="report-photo-preview-grid">
-                {beforePhotos.map((photo, index) => (
-                  <img
-                    key={`before-${index}-${photo}`}
-                    src={photo}
-                    alt={`Before ${index + 1}`}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="report-photo-preview-block">
-            <h4>After photos</h4>
-
-            {afterPhotos.length === 0 ? (
-              <p className="text-muted small mb-0">No after photos.</p>
-            ) : (
-              <div className="report-photo-preview-grid">
-                {afterPhotos.map((photo, index) => (
-                  <img
-                    key={`after-${index}-${photo}`}
-                    src={photo}
-                    alt={`After ${index + 1}`}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+        <div className="report-preview-note">
+          <span>Work completed</span>
+          <p>{formatValue(reportData.workCompleted, "No work notes yet.")}</p>
         </div>
 
-        <div className="report-preview-footer">Generated with JobProof</div>
+        <div className="report-preview-note">
+          <span>Issues found</span>
+          <p>{formatValue(reportData.issuesFound, "No issues listed.")}</p>
+        </div>
+
+        <div className="report-preview-note">
+          <span>Recommendations</span>
+          <p>
+            {formatValue(reportData.recommendations, "No recommendations yet.")}
+          </p>
+        </div>
       </div>
-    </div>
+
+      {renderPhotos("Before photos", reportData.beforePhotos)}
+      {renderPhotos("After photos", reportData.afterPhotos)}
+    </article>
   );
 };
 

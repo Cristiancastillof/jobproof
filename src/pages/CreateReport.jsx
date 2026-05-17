@@ -27,6 +27,16 @@ const createEmptyReport = () => ({
   businessLogo: "",
   workerName: "",
   createdBy: "",
+
+  clientId: "",
+  clientDisplayName: "",
+  clientCompanyName: "",
+  clientContactPerson: "",
+  clientEmail: "",
+  clientPhone: "",
+  clientAddressSnapshot: "",
+  clientAccessNotes: "",
+
   teamInvolved: [],
   clientName: "",
   jobAddress: "",
@@ -85,6 +95,20 @@ const getStatusOptionsByRole = (role) => {
   ];
 };
 
+const buildClientAddress = (client) => {
+  if (!client) return "";
+
+  return [
+    client.job_address,
+    client.suburb,
+    client.state,
+    client.postcode,
+    client.country,
+  ]
+    .filter(Boolean)
+    .join(", ");
+};
+
 const mapSupabaseReportToForm = ({
   report,
   company,
@@ -111,9 +135,20 @@ const mapSupabaseReportToForm = ({
     businessLogo: company?.business_logo_url || "",
     workerName: workerName || "",
     createdBy: report.created_by || "",
+
+    clientId: report.client_id || "",
+    clientDisplayName: report.client_display_name || report.client_name || "",
+    clientCompanyName: report.client_company_name || "",
+    clientContactPerson: report.client_contact_person || "",
+    clientEmail: report.client_email || "",
+    clientPhone: report.client_phone || "",
+    clientAddressSnapshot:
+      report.client_address_snapshot || report.job_address || "",
+    clientAccessNotes: report.client_access_notes || "",
+
     teamInvolved,
-    clientName: report.client_name || "",
-    jobAddress: report.job_address || "",
+    clientName: report.client_name || report.client_display_name || "",
+    jobAddress: report.job_address || report.client_address_snapshot || "",
     jobDate: report.job_date || getTodayDate(),
     startingHour: report.starting_hour ? report.starting_hour.slice(0, 5) : "",
     finishHour: report.finish_hour ? report.finish_hour.slice(0, 5) : "",
@@ -134,6 +169,17 @@ const buildSupabasePayload = ({ reportData, profile, user }) => ({
   company_id: profile.company_id,
   created_by: user.id,
   report_number: reportData.reportNumber,
+
+  client_id: reportData.clientId || null,
+  client_display_name: reportData.clientDisplayName || reportData.clientName,
+  client_company_name: reportData.clientCompanyName,
+  client_contact_person: reportData.clientContactPerson,
+  client_email: reportData.clientEmail,
+  client_phone: reportData.clientPhone,
+  client_address_snapshot:
+    reportData.clientAddressSnapshot || reportData.jobAddress,
+  client_access_notes: reportData.clientAccessNotes,
+
   client_name: reportData.clientName,
   job_address: reportData.jobAddress,
   job_date: reportData.jobDate || null,
@@ -246,6 +292,7 @@ const CreateReport = () => {
   const [photoFiles, setPhotoFiles] = useState(createEmptyPhotoFiles);
   const [company, setCompany] = useState(null);
   const [teamMembers, setTeamMembers] = useState([]);
+  const [clients, setClients] = useState([]);
   const [selectedWorkerIds, setSelectedWorkerIds] = useState([]);
   const [loadingReport, setLoadingReport] = useState(true);
   const [savingReport, setSavingReport] = useState(false);
@@ -263,6 +310,40 @@ const CreateReport = () => {
     }
 
     return uniqueIds;
+  };
+
+  const loadActiveClients = async () => {
+    const { data, error } = await supabase
+      .from("clients")
+      .select(
+        `
+        id,
+        client_display_name,
+        client_type,
+        company_name,
+        contact_person,
+        email,
+        phone,
+        job_address,
+        suburb,
+        state,
+        postcode,
+        country,
+        default_service_type,
+        access_notes,
+        internal_notes,
+        active
+      `
+      )
+      .eq("company_id", profile.company_id)
+      .eq("active", true)
+      .order("client_display_name", { ascending: true });
+
+    if (error) {
+      throw error;
+    }
+
+    setClients(data || []);
   };
 
   useEffect(() => {
@@ -315,6 +396,8 @@ const CreateReport = () => {
 
         const loadedMembers = membersData || [];
         setTeamMembers(loadedMembers);
+
+        await loadActiveClients();
 
         if (isEditMode) {
           let reportQuery = supabase
@@ -480,6 +563,51 @@ const CreateReport = () => {
       teamInvolved,
     }));
   }, [selectedWorkerIds, teamMembers, user?.id, reportData.createdBy]);
+
+  const handleSelectClient = (clientId) => {
+    if (!clientId) {
+      setReportData((currentReportData) => ({
+        ...currentReportData,
+        clientId: "",
+        clientDisplayName: "",
+        clientCompanyName: "",
+        clientContactPerson: "",
+        clientEmail: "",
+        clientPhone: "",
+        clientAddressSnapshot: "",
+        clientAccessNotes: "",
+      }));
+
+      return;
+    }
+
+    const selectedClient = clients.find((client) => client.id === clientId);
+
+    if (!selectedClient) return;
+
+    const addressSnapshot = buildClientAddress(selectedClient);
+    const clientName =
+      selectedClient.client_display_name ||
+      selectedClient.contact_person ||
+      selectedClient.company_name ||
+      "";
+
+    setReportData((currentReportData) => ({
+      ...currentReportData,
+      clientId: selectedClient.id,
+      clientDisplayName: selectedClient.client_display_name || "",
+      clientCompanyName: selectedClient.company_name || "",
+      clientContactPerson: selectedClient.contact_person || "",
+      clientEmail: selectedClient.email || "",
+      clientPhone: selectedClient.phone || "",
+      clientAddressSnapshot: addressSnapshot,
+      clientAccessNotes: selectedClient.access_notes || "",
+      clientName,
+      jobAddress: addressSnapshot || currentReportData.jobAddress,
+      serviceType:
+        selectedClient.default_service_type || currentReportData.serviceType,
+    }));
+  };
 
   const deleteRemovedSupabasePhotos = async (reportId, currentReportData) => {
     const { data: savedPhotos, error } = await supabase
@@ -753,6 +881,22 @@ const CreateReport = () => {
         businessLogo: company?.business_logo_url || reportData.businessLogo,
         workerName: displayName || reportData.workerName,
         createdBy: savedReport.created_by,
+
+        clientId: savedReport.client_id || "",
+        clientDisplayName:
+          savedReport.client_display_name || reportData.clientDisplayName,
+        clientCompanyName:
+          savedReport.client_company_name || reportData.clientCompanyName,
+        clientContactPerson:
+          savedReport.client_contact_person || reportData.clientContactPerson,
+        clientEmail: savedReport.client_email || reportData.clientEmail,
+        clientPhone: savedReport.client_phone || reportData.clientPhone,
+        clientAddressSnapshot:
+          savedReport.client_address_snapshot ||
+          reportData.clientAddressSnapshot,
+        clientAccessNotes:
+          savedReport.client_access_notes || reportData.clientAccessNotes,
+
         teamInvolved: savedTeamInvolved,
         status: savedReport.status || "pending",
         totalHours: savedReport.total_hours || finalTotalHours,
@@ -771,10 +915,10 @@ const CreateReport = () => {
       setMessage({
         type: "success",
         text: hasNewPhotos
-          ? "Report, status, team and photos saved successfully."
+          ? "Report, client, status, team and photos saved successfully."
           : isEditMode
-          ? "Report, status and team updated successfully."
-          : "Report, status and team saved successfully.",
+          ? "Report, client, status and team updated successfully."
+          : "Report, client, status and team saved successfully.",
       });
 
       if (!isEditMode) {
@@ -966,6 +1110,8 @@ const CreateReport = () => {
             selectedWorkerIds={selectedWorkerIds}
             setSelectedWorkerIds={setSelectedWorkerIds}
             statusOptions={statusOptions}
+            clients={clients}
+            onSelectClient={handleSelectClient}
           />
         </div>
 
