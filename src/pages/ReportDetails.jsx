@@ -3,12 +3,16 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import ReportPreview from "../components/ReportPreview";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
+import {
+  buildClientReportMailtoLink,
+  copyClientReportMessage,
+} from "../utils/clientMessage";
 import { generatePDF } from "../utils/generatePDF";
+import { getPublicReportUrl } from "../utils/publicLinks";
 import {
   loadReportActivity,
   recordReportActivity,
 } from "../utils/reportActivity";
-import { getPublicReportUrl } from "../utils/publicLinks";
 
 const formatStatusLabel = (status) => {
   if (!status) return "Pending";
@@ -112,42 +116,6 @@ const ActivityTimeline = ({ activityItems = [] }) => {
   );
 };
 
-const buildMailtoLink = (reportData) => {
-  const email = reportData.clientEmail || "";
-  const clientName =
-    reportData.clientContactPerson ||
-    reportData.clientDisplayName ||
-    reportData.clientName ||
-    "there";
-
-  const publicUrl = getPublicReportUrl(reportData.publicShareToken);
-
-  const subject = `Job report ${reportData.reportNumber || ""}`.trim();
-
-  const body = [
-    `Hi ${clientName},`,
-    "",
-    "Your job report has been completed.",
-    "",
-    `Report number: ${reportData.reportNumber || "Not provided"}`,
-    `Job address: ${
-      reportData.clientAddressSnapshot || reportData.jobAddress || "Not provided"
-    }`,
-    `Service: ${reportData.serviceType || "Not provided"}`,
-    "",
-    publicUrl
-      ? `You can view the report here: ${publicUrl}`
-      : "Please find the report details shared by our team.",
-    "",
-    "Regards,",
-    `${reportData.businessName || "JobProof"}`,
-  ].join("\n");
-
-  return `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(
-    subject
-  )}&body=${encodeURIComponent(body)}`;
-};
-
 const mapReportToPreviewData = ({
   report,
   company,
@@ -220,6 +188,7 @@ const ReportDetails = () => {
   const [loadingReport, setLoadingReport] = useState(true);
   const [updatingShare, setUpdatingShare] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedMessage, setCopiedMessage] = useState(false);
   const [message, setMessage] = useState(null);
 
   const canEditReport = useMemo(() => {
@@ -539,6 +508,25 @@ const ReportDetails = () => {
     }
   };
 
+  const handleCopyClientMessage = async () => {
+    try {
+      await copyClientReportMessage(reportData);
+
+      setCopiedMessage(true);
+
+      setTimeout(() => {
+        setCopiedMessage(false);
+      }, 1800);
+    } catch (error) {
+      console.error("Error copying client message:", error);
+
+      setMessage({
+        type: "danger",
+        text: "There was an error copying the client message.",
+      });
+    }
+  };
+
   if (profileLoading || loadingReport) {
     return (
       <section className="py-5 text-center">
@@ -618,10 +606,20 @@ const ReportDetails = () => {
             Download PDF
           </button>
 
+          {reportData.publicShareEnabled && (
+            <button
+              type="button"
+              className="btn btn-outline-primary"
+              onClick={handleCopyClientMessage}
+            >
+              {copiedMessage ? "Copied!" : "Copy client message"}
+            </button>
+          )}
+
           {canSendToClient && (
             <a
               className="btn btn-primary"
-              href={buildMailtoLink(reportData)}
+              href={buildClientReportMailtoLink(reportData)}
               target="_blank"
               rel="noreferrer"
             >
@@ -685,6 +683,14 @@ const ReportDetails = () => {
                     onClick={handleCopyClientLink}
                   >
                     {copiedLink ? "Copied!" : "Copy client link"}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={handleCopyClientMessage}
+                  >
+                    {copiedMessage ? "Copied!" : "Copy client message"}
                   </button>
 
                   <a

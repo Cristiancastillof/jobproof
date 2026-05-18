@@ -2,8 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
-import { recordReportActivity } from "../utils/reportActivity";
+import {
+  buildClientReportMailtoLink,
+  copyClientReportMessage,
+} from "../utils/clientMessage";
 import { getPublicReportUrl } from "../utils/publicLinks";
+import { recordReportActivity } from "../utils/reportActivity";
 
 const STATUS_OPTIONS = [
   { value: "pending", label: "Pending" },
@@ -77,38 +81,6 @@ const canSendReport = (report) => {
   );
 };
 
-const buildMailtoLink = (report) => {
-  const email = report.client_email || "";
-
-  const clientName =
-    report.client_contact_person ||
-    report.client_display_name ||
-    report.client_name ||
-    "there";
-
-  const publicUrl = getPublicReportUrl(report.public_share_token);
-  const subject = `Job report ${report.report_number || ""}`.trim();
-
-  const body = [
-    `Hi ${clientName},`,
-    "",
-    "Your job report has been completed.",
-    "",
-    `Report number: ${report.report_number || "Not provided"}`,
-    `Job address: ${getClientAddress(report)}`,
-    `Service: ${report.service_type || "Not provided"}`,
-    "",
-    `You can view the report here: ${publicUrl}`,
-    "",
-    "Regards,",
-    "JobProof",
-  ].join("\n");
-
-  return `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(
-    subject
-  )}&body=${encodeURIComponent(body)}`;
-};
-
 const Reports = () => {
   const { user, profile, profileLoading } = useAuth();
 
@@ -117,6 +89,7 @@ const Reports = () => {
   const [updatingStatusId, setUpdatingStatusId] = useState(null);
   const [updatingShareId, setUpdatingShareId] = useState(null);
   const [copiedReportId, setCopiedReportId] = useState(null);
+  const [copiedMessageReportId, setCopiedMessageReportId] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [message, setMessage] = useState(null);
@@ -464,6 +437,25 @@ const Reports = () => {
     }
   };
 
+  const handleCopyClientMessage = async (report) => {
+    try {
+      await copyClientReportMessage(report);
+
+      setCopiedMessageReportId(report.id);
+
+      setTimeout(() => {
+        setCopiedMessageReportId(null);
+      }, 1800);
+    } catch (error) {
+      console.error("Error copying client message:", error);
+
+      setMessage({
+        type: "danger",
+        text: "There was an error copying the client message.",
+      });
+    }
+  };
+
   const renderStatusControl = (report) => {
     const status = report.status || "pending";
 
@@ -529,10 +521,18 @@ const Reports = () => {
           {copiedReportId === report.id ? "Copied!" : "Copy link"}
         </button>
 
+        <button
+          type="button"
+          className={`btn ${buttonSizeClass} btn-outline-secondary`}
+          onClick={() => handleCopyClientMessage(report)}
+        >
+          {copiedMessageReportId === report.id ? "Copied!" : "Copy message"}
+        </button>
+
         {canSendReport(report) && (
           <a
             className={`btn ${buttonSizeClass} btn-primary`}
-            href={buildMailtoLink(report)}
+            href={buildClientReportMailtoLink(report)}
             target="_blank"
             rel="noreferrer"
           >
