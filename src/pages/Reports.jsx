@@ -52,6 +52,11 @@ const getClientAddress = (report) => {
   );
 };
 
+const getPublicReportUrl = (token) => {
+  if (!token) return "";
+  return `${window.location.origin}/reports/client/${token}`;
+};
+
 const canEditReport = ({ report, profile, user }) => {
   if (!report || !profile || !user) return false;
 
@@ -67,7 +72,12 @@ const canManageStatus = (profile) => {
 };
 
 const canSendReport = (report) => {
-  return report?.status === "completed" && Boolean(report?.client_email);
+  return (
+    report?.status === "completed" &&
+    Boolean(report?.client_email) &&
+    Boolean(report?.public_share_enabled) &&
+    Boolean(report?.public_share_token)
+  );
 };
 
 const buildMailtoLink = (report) => {
@@ -79,6 +89,7 @@ const buildMailtoLink = (report) => {
     report.client_name ||
     "there";
 
+  const publicUrl = getPublicReportUrl(report.public_share_token);
   const subject = `Job report ${report.report_number || ""}`.trim();
 
   const body = [
@@ -90,7 +101,7 @@ const buildMailtoLink = (report) => {
     `Job address: ${getClientAddress(report)}`,
     `Service: ${report.service_type || "Not provided"}`,
     "",
-    "Please find the report details shared by our team.",
+    `You can view the report here: ${publicUrl}`,
     "",
     "Regards,",
     "JobProof",
@@ -107,6 +118,8 @@ const Reports = () => {
   const [reports, setReports] = useState([]);
   const [loadingReports, setLoadingReports] = useState(true);
   const [updatingStatusId, setUpdatingStatusId] = useState(null);
+  const [updatingShareId, setUpdatingShareId] = useState(null);
+  const [copiedReportId, setCopiedReportId] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [message, setMessage] = useState(null);
@@ -198,6 +211,9 @@ const Reports = () => {
           total_hours,
           service_type,
           status,
+          public_share_token,
+          public_share_enabled,
+          public_shared_at,
           created_at,
           updated_at
         `
@@ -237,6 +253,9 @@ const Reports = () => {
       return;
     }
 
+    const shouldDisableSharing =
+      nextStatus !== "completed" && report.public_share_enabled;
+
     setUpdatingStatusId(report.id);
     setMessage(null);
 
@@ -245,6 +264,9 @@ const Reports = () => {
         .from("reports")
         .update({
           status: nextStatus,
+          public_share_enabled: shouldDisableSharing
+            ? false
+            : report.public_share_enabled,
           updated_at: new Date().toISOString(),
         })
         .eq("id", report.id)
@@ -271,6 +293,9 @@ const Reports = () => {
           total_hours,
           service_type,
           status,
+          public_share_token,
+          public_share_enabled,
+          public_shared_at,
           created_at,
           updated_at
         `
@@ -289,7 +314,11 @@ const Reports = () => {
 
       setMessage({
         type: "success",
-        text: `Report marked as ${formatStatusLabel(nextStatus)}.`,
+        text: shouldDisableSharing
+          ? `Report marked as ${formatStatusLabel(
+              nextStatus
+            )}. Client sharing was disabled.`
+          : `Report marked as ${formatStatusLabel(nextStatus)}.`,
       });
     } catch (error) {
       console.error("Error updating report status:", error);
@@ -302,6 +331,95 @@ const Reports = () => {
       });
     } finally {
       setUpdatingStatusId(null);
+    }
+  };
+
+  const handleEnableSharing = async (report) => {
+    if (!canUpdateStatus) {
+      setMessage({
+        type: "warning",
+        text: "Only admins and supervisors can enable client sharing.",
+      });
+      return;
+    }
+
+    if (report.status !== "completed") {
+      setMessage({
+        type: "warning",
+        text: "Only completed reports can be shared with clients.",
+      });
+      return;
+    }
+
+    setUpdatingShareId(report.id);
+    setMessage(null);
+
+    try {
+      const { data, error } = await supabase
+        .from("reports")
+        .update({
+          public_share_enabled: true,
+          public_shared_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", report.id)
+        .eq("company_id", profile.company_id)
+        .select(
+          "id, public_share_token, public_share_enabled, public_shared_at, updated_at"
+        )
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      setReports((currentReports) =>
+        currentReports.map((currentReport) =>
+          currentReport.id === report.id
+            ? {
+                ...currentReport,
+                public_share_token: data.public_share_token,
+                public_share_enabled: data.public_share_enabled,
+                public_shared_at: data.public_shared_at,
+                updated_at: data.updated_at,
+              }
+            : currentReport
+        )
+      );
+
+      setMessage({
+        type: "success",
+        text: "Client sharing enabled for this report.",
+      });
+    } catch (error) {
+      console.error("Error enabling sharing:", error);
+
+      setMessage({
+        type: "danger",
+        text:
+          error.message ||
+          "There was an error enabling client sharing for this report.",
+      });
+    } finally {
+      setUpdatingShareId(null);
+    }
+  };
+
+  const handleCopyClientLink = async (report) => {
+    const publicUrl = getPublicReportUrl(report.public_share_token);
+
+    if (!publicUrl) return;
+
+    try {
+      await navigator.clipboard.writeText(publicUrl);
+      setCopiedReportId(report.id);
+
+      setTimeout(() => {
+        setCopiedReportId(null);
+      }, 1800);
+    } catch (error) {
+      console.error("Error copying client link:", error);
+      window.prompt("Copy this client report link:", publicUrl);
     }
   };
 
@@ -338,18 +456,49 @@ const Reports = () => {
     );
   };
 
-  const renderSendButton = (report, size = "") => {
-    if (!canSendReport(report)) return null;
+  const renderShareActions = (report, size = "") => {
+    const buttonSizeClass = size ? `btn-${size}` : "";
+
+    if (report.status !== "completed") {
+      return null;
+    }
+
+    if (!report.public_share_enabled) {
+      if (!canUpdateStatus) return null;
+
+      return (
+        <button
+          type="button"
+          className={`btn ${buttonSizeClass} btn-outline-primary`}
+          onClick={() => handleEnableSharing(report)}
+          disabled={updatingShareId === report.id}
+        >
+          {updatingShareId === report.id ? "Enabling..." : "Enable share"}
+        </button>
+      );
+    }
 
     return (
-      <a
-        className={`btn ${size ? `btn-${size}` : ""} btn-primary`}
-        href={buildMailtoLink(report)}
-        target="_blank"
-        rel="noreferrer"
-      >
-        Send
-      </a>
+      <>
+        <button
+          type="button"
+          className={`btn ${buttonSizeClass} btn-outline-primary`}
+          onClick={() => handleCopyClientLink(report)}
+        >
+          {copiedReportId === report.id ? "Copied!" : "Copy link"}
+        </button>
+
+        {canSendReport(report) && (
+          <a
+            className={`btn ${buttonSizeClass} btn-primary`}
+            href={buildMailtoLink(report)}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Send
+          </a>
+        )}
+      </>
     );
   };
 
@@ -580,7 +729,7 @@ const Reports = () => {
 
                         <td className="text-end">
                           <div className="d-flex justify-content-end gap-2 flex-wrap">
-                            {renderSendButton(report, "sm")}
+                            {renderShareActions(report, "sm")}
 
                             <Link
                               to={`/reports/${report.id}`}
@@ -657,7 +806,7 @@ const Reports = () => {
                   )}
 
                   <div className="d-flex gap-2 flex-wrap mt-3">
-                    {renderSendButton(report, "sm")}
+                    {renderShareActions(report, "sm")}
 
                     <Link
                       to={`/reports/${report.id}`}
@@ -681,6 +830,14 @@ const Reports = () => {
                       Completed report without client email.
                     </p>
                   )}
+
+                  {report.status === "completed" &&
+                    report.client_email &&
+                    !report.public_share_enabled && (
+                      <p className="text-muted small mt-3 mb-0">
+                        Enable sharing before sending the client link.
+                      </p>
+                    )}
                 </article>
               );
             })}

@@ -10,6 +10,11 @@ const formatStatusLabel = (status) => {
   return status.charAt(0).toUpperCase() + status.slice(1);
 };
 
+const getPublicReportUrl = (token) => {
+  if (!token) return "";
+  return `${window.location.origin}/reports/client/${token}`;
+};
+
 const buildMailtoLink = (reportData) => {
   const email = reportData.clientEmail || "";
   const clientName =
@@ -18,12 +23,14 @@ const buildMailtoLink = (reportData) => {
     reportData.clientName ||
     "there";
 
+  const publicUrl = getPublicReportUrl(reportData.publicShareToken);
+
   const subject = `Job report ${reportData.reportNumber || ""}`.trim();
 
   const body = [
     `Hi ${clientName},`,
     "",
-    `Your job report has been completed.`,
+    "Your job report has been completed.",
     "",
     `Report number: ${reportData.reportNumber || "Not provided"}`,
     `Job address: ${
@@ -31,9 +38,11 @@ const buildMailtoLink = (reportData) => {
     }`,
     `Service: ${reportData.serviceType || "Not provided"}`,
     "",
-    "Please find the report details attached or shared by our team.",
+    publicUrl
+      ? `You can view the report here: ${publicUrl}`
+      : "Please find the report details shared by our team.",
     "",
-    `Regards,`,
+    "Regards,",
     `${reportData.businessName || "JobProof"}`,
   ].join("\n");
 
@@ -68,6 +77,10 @@ const mapReportToPreviewData = ({
     businessLogo: company?.business_logo_url || "",
     workerName: displayName || "",
     createdBy: report.created_by || "",
+
+    publicShareToken: report.public_share_token || "",
+    publicShareEnabled: Boolean(report.public_share_enabled),
+    publicSharedAt: report.public_shared_at || "",
 
     clientId: report.client_id || "",
     clientDisplayName: report.client_display_name || report.client_name || "",
@@ -107,6 +120,8 @@ const ReportDetails = () => {
 
   const [reportData, setReportData] = useState(null);
   const [loadingReport, setLoadingReport] = useState(true);
+  const [updatingShare, setUpdatingShare] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [message, setMessage] = useState(null);
 
   const canEditReport = useMemo(() => {
@@ -119,118 +134,259 @@ const ReportDetails = () => {
     );
   }, [reportData, profile, user]);
 
-  const canSendToClient = useMemo(() => {
-    return reportData?.status === "completed" && reportData?.clientEmail;
+  const canManageShare = useMemo(() => {
+    return profile?.role === "admin" || profile?.role === "supervisor";
+  }, [profile]);
+
+  const publicReportUrl = useMemo(() => {
+    if (!reportData?.publicShareToken) return "";
+    return getPublicReportUrl(reportData.publicShareToken);
   }, [reportData]);
 
-  useEffect(() => {
-    const loadReportDetails = async () => {
-      if (profileLoading) return;
+  const canSendToClient = useMemo(() => {
+    return (
+      reportData?.status === "completed" &&
+      reportData?.clientEmail &&
+      reportData?.publicShareEnabled &&
+      reportData?.publicShareToken
+    );
+  }, [reportData]);
 
-      if (!user?.id || !profile?.company_id) {
-        setLoadingReport(false);
-        return;
+  const loadReportDetails = async () => {
+    if (profileLoading) return;
+
+    if (!user?.id || !profile?.company_id) {
+      setLoadingReport(false);
+      return;
+    }
+
+    setLoadingReport(true);
+    setMessage(null);
+
+    try {
+      const { data: report, error: reportError } = await supabase
+        .from("reports")
+        .select("*")
+        .eq("id", id)
+        .eq("company_id", profile.company_id)
+        .single();
+
+      if (reportError) {
+        throw reportError;
       }
 
-      setLoadingReport(true);
-      setMessage(null);
+      const { data: company, error: companyError } = await supabase
+        .from("companies")
+        .select(
+          "id, business_name, business_email, business_phone, business_logo_url"
+        )
+        .eq("id", profile.company_id)
+        .single();
 
-      try {
-        const { data: report, error: reportError } = await supabase
-          .from("reports")
-          .select("*")
-          .eq("id", id)
-          .eq("company_id", profile.company_id)
-          .single();
+      if (companyError) {
+        throw companyError;
+      }
 
-        if (reportError) {
-          throw reportError;
-        }
+      const { data: photos, error: photosError } = await supabase
+        .from("report_photos")
+        .select("id, photo_type, photo_url, photo_order")
+        .eq("report_id", id)
+        .eq("company_id", profile.company_id)
+        .order("photo_order", { ascending: true });
 
-        const { data: company, error: companyError } = await supabase
-          .from("companies")
-          .select(
-            "id, business_name, business_email, business_phone, business_logo_url"
-          )
-          .eq("id", profile.company_id)
-          .single();
+      if (photosError) {
+        throw photosError;
+      }
 
-        if (companyError) {
-          throw companyError;
-        }
-
-        const { data: photos, error: photosError } = await supabase
-          .from("report_photos")
-          .select("id, photo_type, photo_url, photo_order")
-          .eq("report_id", id)
-          .eq("company_id", profile.company_id)
-          .order("photo_order", { ascending: true });
-
-        if (photosError) {
-          throw photosError;
-        }
-
-        const { data: reportWorkers, error: workersError } = await supabase
-          .from("report_workers")
-          .select(
-            `
-            id,
-            profile_id,
-            role_on_job,
-            profiles:profile_id (
-              id,
-              full_name,
-              email,
-              role
-            )
+      const { data: reportWorkers, error: workersError } = await supabase
+        .from("report_workers")
+        .select(
           `
+          id,
+          profile_id,
+          role_on_job,
+          profiles:profile_id (
+            id,
+            full_name,
+            email,
+            role
           )
-          .eq("report_id", id)
-          .eq("company_id", profile.company_id);
+        `
+        )
+        .eq("report_id", id)
+        .eq("company_id", profile.company_id);
 
-        if (workersError) {
-          throw workersError;
-        }
-
-        const teamInvolved = (reportWorkers || [])
-          .map((worker) => ({
-            id: worker.profiles?.id || worker.profile_id,
-            fullName: worker.profiles?.full_name || "Unknown user",
-            email: worker.profiles?.email || "",
-            role: worker.profiles?.role || "worker",
-            roleOnJob: worker.role_on_job || "worker",
-          }))
-          .sort((a, b) => {
-            if (a.roleOnJob === "lead") return -1;
-            if (b.roleOnJob === "lead") return 1;
-            return a.fullName.localeCompare(b.fullName);
-          });
-
-        setReportData(
-          mapReportToPreviewData({
-            report,
-            company,
-            photos: photos || [],
-            teamInvolved,
-            displayName,
-          })
-        );
-      } catch (error) {
-        console.error("Error loading report details:", error);
-
-        setMessage({
-          type: "danger",
-          text:
-            error.message ||
-            "This report could not be found or you do not have access to it.",
-        });
-      } finally {
-        setLoadingReport(false);
+      if (workersError) {
+        throw workersError;
       }
-    };
 
+      const teamInvolved = (reportWorkers || [])
+        .map((worker) => ({
+          id: worker.profiles?.id || worker.profile_id,
+          fullName: worker.profiles?.full_name || "Unknown user",
+          email: worker.profiles?.email || "",
+          role: worker.profiles?.role || "worker",
+          roleOnJob: worker.role_on_job || "worker",
+        }))
+        .sort((a, b) => {
+          if (a.roleOnJob === "lead") return -1;
+          if (b.roleOnJob === "lead") return 1;
+          return a.fullName.localeCompare(b.fullName);
+        });
+
+      setReportData(
+        mapReportToPreviewData({
+          report,
+          company,
+          photos: photos || [],
+          teamInvolved,
+          displayName,
+        })
+      );
+    } catch (error) {
+      console.error("Error loading report details:", error);
+
+      setMessage({
+        type: "danger",
+        text:
+          error.message ||
+          "This report could not be found or you do not have access to it.",
+      });
+    } finally {
+      setLoadingReport(false);
+    }
+  };
+
+  useEffect(() => {
     loadReportDetails();
   }, [id, user, profile, profileLoading, displayName]);
+
+  const handleEnableSharing = async () => {
+    if (!canManageShare) {
+      setMessage({
+        type: "warning",
+        text: "Only admins and supervisors can manage client sharing.",
+      });
+      return;
+    }
+
+    if (reportData.status !== "completed") {
+      setMessage({
+        type: "warning",
+        text: "Only completed reports can be shared with clients.",
+      });
+      return;
+    }
+
+    setUpdatingShare(true);
+    setMessage(null);
+
+    try {
+      const { data, error } = await supabase
+        .from("reports")
+        .update({
+          public_share_enabled: true,
+          public_shared_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", reportData.id)
+        .eq("company_id", profile.company_id)
+        .select("public_share_token, public_share_enabled, public_shared_at")
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      setReportData((currentReportData) => ({
+        ...currentReportData,
+        publicShareToken: data.public_share_token,
+        publicShareEnabled: Boolean(data.public_share_enabled),
+        publicSharedAt: data.public_shared_at,
+      }));
+
+      setMessage({
+        type: "success",
+        text: "Client sharing enabled. You can now copy or send the client link.",
+      });
+    } catch (error) {
+      console.error("Error enabling public sharing:", error);
+
+      setMessage({
+        type: "danger",
+        text:
+          error.message ||
+          "There was an error enabling client sharing for this report.",
+      });
+    } finally {
+      setUpdatingShare(false);
+    }
+  };
+
+  const handleDisableSharing = async () => {
+    if (!canManageShare) return;
+
+    const confirmDisable = window.confirm(
+      "Disable this client share link? The client will no longer be able to open it."
+    );
+
+    if (!confirmDisable) return;
+
+    setUpdatingShare(true);
+    setMessage(null);
+
+    try {
+      const { error } = await supabase
+        .from("reports")
+        .update({
+          public_share_enabled: false,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", reportData.id)
+        .eq("company_id", profile.company_id);
+
+      if (error) {
+        throw error;
+      }
+
+      setReportData((currentReportData) => ({
+        ...currentReportData,
+        publicShareEnabled: false,
+      }));
+
+      setMessage({
+        type: "success",
+        text: "Client sharing disabled.",
+      });
+    } catch (error) {
+      console.error("Error disabling public sharing:", error);
+
+      setMessage({
+        type: "danger",
+        text:
+          error.message ||
+          "There was an error disabling client sharing for this report.",
+      });
+    } finally {
+      setUpdatingShare(false);
+    }
+  };
+
+  const handleCopyClientLink = async () => {
+    if (!publicReportUrl) return;
+
+    try {
+      await navigator.clipboard.writeText(publicReportUrl);
+      setCopiedLink(true);
+
+      setTimeout(() => {
+        setCopiedLink(false);
+      }, 1800);
+    } catch (error) {
+      console.error("Error copying link:", error);
+      window.prompt("Copy this client report link:", publicReportUrl);
+    }
+  };
 
   if (profileLoading || loadingReport) {
     return (
@@ -324,19 +480,109 @@ const ReportDetails = () => {
         </div>
       </div>
 
-      {reportData.status === "completed" && !reportData.clientEmail && (
-        <div className="alert alert-warning">
-          This report is completed, but no client email is saved. Add a client
-          email before sending the report.
+      {message && message.type !== "danger" && (
+        <div className={`alert alert-${message.type}`} role="alert">
+          {message.text}
         </div>
       )}
 
-      {reportData.status !== "completed" && (
-        <div className="alert alert-light border">
-          The send option will appear when the report status is{" "}
-          <strong>Completed</strong>.
+      <div className="card shadow-sm border-0 mb-4 client-share-card">
+        <div className="card-body p-4">
+          <div className="d-flex flex-column flex-lg-row justify-content-between gap-3">
+            <div>
+              <p className="eyebrow mb-2">Client sharing</p>
+
+              <h2 className="h5 mb-2">Client-ready report link</h2>
+
+              {reportData.status !== "completed" ? (
+                <p className="text-muted mb-0">
+                  The client link becomes available when this report is marked as{" "}
+                  <strong>Completed</strong>.
+                </p>
+              ) : reportData.publicShareEnabled ? (
+                <p className="text-muted mb-0">
+                  Sharing is enabled. Anyone with this link can view the
+                  completed client report.
+                </p>
+              ) : (
+                <p className="text-muted mb-0">
+                  Enable sharing to generate a client-ready link for this
+                  completed report.
+                </p>
+              )}
+            </div>
+
+            <div className="d-flex flex-wrap gap-2 align-items-start">
+              {reportData.status === "completed" &&
+                !reportData.publicShareEnabled &&
+                canManageShare && (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={handleEnableSharing}
+                    disabled={updatingShare}
+                  >
+                    {updatingShare ? "Enabling..." : "Enable client sharing"}
+                  </button>
+                )}
+
+              {reportData.publicShareEnabled && (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-outline-primary"
+                    onClick={handleCopyClientLink}
+                  >
+                    {copiedLink ? "Copied!" : "Copy client link"}
+                  </button>
+
+                  <a
+                    className="btn btn-outline-secondary"
+                    href={publicReportUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open client view
+                  </a>
+
+                  {canManageShare && (
+                    <button
+                      type="button"
+                      className="btn btn-outline-danger"
+                      onClick={handleDisableSharing}
+                      disabled={updatingShare}
+                    >
+                      Disable sharing
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          {reportData.publicShareEnabled && publicReportUrl && (
+            <div className="client-share-url mt-3">
+              <span>{publicReportUrl}</span>
+            </div>
+          )}
+
+          {reportData.status === "completed" && !reportData.clientEmail && (
+            <div className="alert alert-warning mt-3 mb-0">
+              This report is completed, but no client email is saved. Add a
+              client email before sending the report.
+            </div>
+          )}
+
+          {reportData.status === "completed" &&
+            reportData.clientEmail &&
+            !reportData.publicShareEnabled && (
+              <div className="alert alert-light border mt-3 mb-0">
+                Enable client sharing first, then the email button will include
+                the client report link.
+              </div>
+            )}
         </div>
-      )}
+      </div>
 
       <ReportPreview reportData={reportData} />
     </section>

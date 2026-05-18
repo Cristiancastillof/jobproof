@@ -14,6 +14,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Team from "./pages/Team";
 import Clients from "./pages/Clients";
+import PublicReport from "./pages/PublicReport";
 
 const HomeRoute = () => {
   const { isAuthenticated, authLoading } = useAuth();
@@ -40,6 +41,8 @@ const App = () => {
       <main className="container py-4">
         <Routes>
           <Route path="/" element={<HomeRoute />} />
+
+          <Route path="/reports/client/:token" element={<PublicReport />} />
 
           <Route
             path="/login"
