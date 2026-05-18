@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
+import { recordReportActivity } from "../utils/reportActivity";
 
 const STATUS_OPTIONS = [
   { value: "pending", label: "Pending" },
@@ -306,6 +307,30 @@ const Reports = () => {
         throw error;
       }
 
+      await recordReportActivity({
+        reportId: report.id,
+        companyId: profile.company_id,
+        actorId: user.id,
+        activityType: "status_changed",
+        previousValue: report.status || "pending",
+        newValue: nextStatus,
+        activityNote: `Status changed from ${formatStatusLabel(
+          report.status || "pending"
+        )} to ${formatStatusLabel(nextStatus)}.`,
+      });
+
+      if (shouldDisableSharing) {
+        await recordReportActivity({
+          reportId: report.id,
+          companyId: profile.company_id,
+          actorId: user.id,
+          activityType: "sharing_disabled",
+          previousValue: "enabled",
+          newValue: "disabled",
+          activityNote: "Client sharing disabled because report is no longer completed.",
+        });
+      }
+
       setReports((currentReports) =>
         currentReports.map((currentReport) =>
           currentReport.id === report.id ? data : currentReport
@@ -373,6 +398,15 @@ const Reports = () => {
         throw error;
       }
 
+      await recordReportActivity({
+        reportId: report.id,
+        companyId: profile.company_id,
+        actorId: user.id,
+        activityType: "sharing_enabled",
+        newValue: "enabled",
+        activityNote: "Client sharing enabled.",
+      });
+
       setReports((currentReports) =>
         currentReports.map((currentReport) =>
           currentReport.id === report.id
@@ -412,6 +446,16 @@ const Reports = () => {
 
     try {
       await navigator.clipboard.writeText(publicUrl);
+
+      await recordReportActivity({
+        reportId: report.id,
+        companyId: profile.company_id,
+        actorId: user.id,
+        activityType: "client_link_copied",
+        newValue: "copied",
+        activityNote: "Client report link copied.",
+      });
+
       setCopiedReportId(report.id);
 
       setTimeout(() => {

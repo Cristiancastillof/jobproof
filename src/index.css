@@ -3991,3 +3991,62 @@ textarea:focus::placeholder {
     width: 100%;
   }
 }
+/* Report activity timeline */
+
+.report-activity-card {
+  border-radius: 24px;
+}
+
+.report-activity-list {
+  display: grid;
+  gap: 0;
+}
+
+.report-activity-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 12px;
+  padding: 0 0 18px;
+}
+
+.report-activity-item:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 16px;
+  bottom: 0;
+  width: 2px;
+  background: #e2e8f0;
+}
+
+.report-activity-dot {
+  width: 14px;
+  height: 14px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: var(--jp-blue);
+  border: 3px solid #dbeafe;
+  z-index: 1;
+}
+
+.report-activity-item strong {
+  color: var(--jp-navy);
+  font-size: 0.98rem;
+}
+
+.report-activity-item span {
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.report-activity-item p {
+  color: #475569;
+  margin-top: 4px;
+}
+
+.report-activity-item small {
+  color: #64748b;
+  font-weight: 650;
+}

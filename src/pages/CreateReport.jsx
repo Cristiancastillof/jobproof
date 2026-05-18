@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 import { calculateTotalHours } from "../utils/calculateTotalHours";
 import { generatePDF } from "../utils/generatePDF";
+import { recordReportActivity } from "../utils/reportActivity";
 
 const LOCAL_REPORTS_KEY = "jobproofReports";
 const REPORT_PHOTOS_BUCKET = "report-photos";
@@ -841,6 +842,15 @@ const CreateReport = () => {
         }
 
         savedReport = data;
+
+        await recordReportActivity({
+          reportId: savedReport.id,
+          companyId: profile.company_id,
+          actorId: user.id,
+          activityType: "report_updated",
+          newValue: savedReport.status || "pending",
+          activityNote: "Report updated.",
+        });
       } else {
         const { data, error } = await supabase
           .from("reports")
@@ -857,6 +867,15 @@ const CreateReport = () => {
         }
 
         savedReport = data;
+
+        await recordReportActivity({
+          reportId: savedReport.id,
+          companyId: profile.company_id,
+          actorId: user.id,
+          activityType: "report_created",
+          newValue: savedReport.status || "pending",
+          activityNote: "Report created.",
+        });
       }
 
       await deleteRemovedSupabasePhotos(savedReport.id, reportData);

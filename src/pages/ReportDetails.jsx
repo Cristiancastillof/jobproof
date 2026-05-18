@@ -4,10 +4,111 @@ import ReportPreview from "../components/ReportPreview";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 import { generatePDF } from "../utils/generatePDF";
+import {
+  loadReportActivity,
+  recordReportActivity,
+} from "../utils/reportActivity";
 
 const formatStatusLabel = (status) => {
   if (!status) return "Pending";
   return status.charAt(0).toUpperCase() + status.slice(1);
+};
+
+const formatActivityLabel = (activityType) => {
+  const labels = {
+    report_created: "Report created",
+    report_updated: "Report updated",
+    status_changed: "Status changed",
+    sharing_enabled: "Client sharing enabled",
+    sharing_disabled: "Client sharing disabled",
+    client_link_copied: "Client link copied",
+    client_email_opened: "Client email opened",
+  };
+
+  return labels[activityType] || "Activity";
+};
+
+const formatActivityDate = (dateValue) => {
+  if (!dateValue) return "Date not available";
+
+  const date = new Date(dateValue);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Date not available";
+  }
+
+  return date.toLocaleString("en-AU", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const ActivityTimeline = ({ activityItems = [] }) => {
+  if (!activityItems.length) {
+    return (
+      <div className="card shadow-sm border-0 report-activity-card mb-4">
+        <div className="card-body p-4">
+          <p className="eyebrow mb-2">Activity timeline</p>
+
+          <h2 className="h5 mb-2">No activity recorded yet</h2>
+
+          <p className="text-muted mb-0">
+            Report activity will appear here when the report is created,
+            updated, shared or sent to a client.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card shadow-sm border-0 report-activity-card mb-4">
+      <div className="card-body p-4">
+        <p className="eyebrow mb-2">Activity timeline</p>
+
+        <h2 className="h5 mb-4">Report history</h2>
+
+        <div className="report-activity-list">
+          {activityItems.map((item) => {
+            const actorName =
+              item.profiles?.full_name ||
+              item.profiles?.email ||
+              "Unknown user";
+
+            return (
+              <div className="report-activity-item" key={item.id}>
+                <div className="report-activity-dot"></div>
+
+                <div>
+                  <div className="d-flex flex-wrap justify-content-between gap-2">
+                    <strong>{formatActivityLabel(item.activity_type)}</strong>
+
+                    <span>{formatActivityDate(item.created_at)}</span>
+                  </div>
+
+                  <p className="mb-1">
+                    {item.activity_note || "No activity note provided."}
+                  </p>
+
+                  <small>
+                    By {actorName}
+                    {item.previous_value || item.new_value
+                      ? ` · ${item.previous_value || "—"} → ${
+                          item.new_value || "—"
+                        }`
+                      : ""}
+                  </small>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const getPublicReportUrl = (token) => {
@@ -119,6 +220,7 @@ const ReportDetails = () => {
   const { user, profile, displayName, profileLoading } = useAuth();
 
   const [reportData, setReportData] = useState(null);
+  const [activityItems, setActivityItems] = useState([]);
   const [loadingReport, setLoadingReport] = useState(true);
   const [updatingShare, setUpdatingShare] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -234,6 +336,13 @@ const ReportDetails = () => {
           return a.fullName.localeCompare(b.fullName);
         });
 
+      const loadedActivity = await loadReportActivity({
+        reportId: id,
+        companyId: profile.company_id,
+      });
+
+      setActivityItems(loadedActivity);
+
       setReportData(
         mapReportToPreviewData({
           report,
@@ -260,6 +369,17 @@ const ReportDetails = () => {
   useEffect(() => {
     loadReportDetails();
   }, [id, user, profile, profileLoading, displayName]);
+
+  const refreshActivity = async () => {
+    if (!reportData?.id || !profile?.company_id) return;
+
+    const loadedActivity = await loadReportActivity({
+      reportId: reportData.id,
+      companyId: profile.company_id,
+    });
+
+    setActivityItems(loadedActivity);
+  };
 
   const handleEnableSharing = async () => {
     if (!canManageShare) {
@@ -298,12 +418,23 @@ const ReportDetails = () => {
         throw error;
       }
 
+      await recordReportActivity({
+        reportId: reportData.id,
+        companyId: profile.company_id,
+        actorId: user.id,
+        activityType: "sharing_enabled",
+        newValue: "enabled",
+        activityNote: "Client sharing enabled.",
+      });
+
       setReportData((currentReportData) => ({
         ...currentReportData,
         publicShareToken: data.public_share_token,
         publicShareEnabled: Boolean(data.public_share_enabled),
         publicSharedAt: data.public_shared_at,
       }));
+
+      await refreshActivity();
 
       setMessage({
         type: "success",
@@ -349,10 +480,22 @@ const ReportDetails = () => {
         throw error;
       }
 
+      await recordReportActivity({
+        reportId: reportData.id,
+        companyId: profile.company_id,
+        actorId: user.id,
+        activityType: "sharing_disabled",
+        previousValue: "enabled",
+        newValue: "disabled",
+        activityNote: "Client sharing disabled.",
+      });
+
       setReportData((currentReportData) => ({
         ...currentReportData,
         publicShareEnabled: false,
       }));
+
+      await refreshActivity();
 
       setMessage({
         type: "success",
@@ -377,6 +520,18 @@ const ReportDetails = () => {
 
     try {
       await navigator.clipboard.writeText(publicReportUrl);
+
+      await recordReportActivity({
+        reportId: reportData.id,
+        companyId: profile.company_id,
+        actorId: user.id,
+        activityType: "client_link_copied",
+        newValue: "copied",
+        activityNote: "Client report link copied.",
+      });
+
+      await refreshActivity();
+
       setCopiedLink(true);
 
       setTimeout(() => {
@@ -583,6 +738,8 @@ const ReportDetails = () => {
             )}
         </div>
       </div>
+
+      <ActivityTimeline activityItems={activityItems} />
 
       <ReportPreview reportData={reportData} />
     </section>
