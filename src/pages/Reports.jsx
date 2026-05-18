@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 import { recordReportActivity } from "../utils/reportActivity";
+import { getPublicReportUrl } from "../utils/publicLinks";
 
 const STATUS_OPTIONS = [
   { value: "pending", label: "Pending" },
@@ -51,11 +52,6 @@ const getClientAddress = (report) => {
     report.job_address ||
     "Address not provided"
   );
-};
-
-const getPublicReportUrl = (token) => {
-  if (!token) return "";
-  return `${window.location.origin}/reports/client/${token}`;
 };
 
 const canEditReport = ({ report, profile, user }) => {
@@ -327,7 +323,8 @@ const Reports = () => {
           activityType: "sharing_disabled",
           previousValue: "enabled",
           newValue: "disabled",
-          activityNote: "Client sharing disabled because report is no longer completed.",
+          activityNote:
+            "Client sharing disabled because report is no longer completed.",
         });
       }
 

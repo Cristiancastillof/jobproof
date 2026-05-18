@@ -8,6 +8,7 @@ import {
   loadReportActivity,
   recordReportActivity,
 } from "../utils/reportActivity";
+import { getPublicReportUrl } from "../utils/publicLinks";
 
 const formatStatusLabel = (status) => {
   if (!status) return "Pending";
@@ -109,11 +110,6 @@ const ActivityTimeline = ({ activityItems = [] }) => {
       </div>
     </div>
   );
-};
-
-const getPublicReportUrl = (token) => {
-  if (!token) return "";
-  return `${window.location.origin}/reports/client/${token}`;
 };
 
 const buildMailtoLink = (reportData) => {
