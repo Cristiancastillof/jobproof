@@ -14,6 +14,22 @@ const formatStatusLabel = (status) => {
   return status.charAt(0).toUpperCase() + status.slice(1);
 };
 
+const formatDate = (dateValue) => {
+  if (!dateValue) return "Not provided";
+
+  const date = new Date(dateValue);
+
+  if (Number.isNaN(date.getTime())) {
+    return dateValue;
+  }
+
+  return date.toLocaleDateString("en-AU", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
 const mapPublicReportToPreviewData = ({ report, photos, team }) => {
   const beforePhotos = photos
     .filter((photo) => photo.photo_type === "before")
@@ -176,7 +192,7 @@ const PublicReport = () => {
 
   if (loadingReport) {
     return (
-      <section className="public-report-page py-5 text-center">
+      <section className="public-report-page public-report-loading text-center">
         <div className="spinner-border text-primary mb-3" role="status">
           <span className="visually-hidden">Loading...</span>
         </div>
@@ -194,7 +210,7 @@ const PublicReport = () => {
     return (
       <section className="public-report-page py-5">
         <div className="public-report-shell">
-          <div className="card shadow-sm border-0">
+          <div className="card shadow-sm border-0 public-report-error-card">
             <div className="card-body p-4 p-md-5 text-center">
               <p className="eyebrow mb-2">Shared report</p>
 
@@ -215,42 +231,97 @@ const PublicReport = () => {
     );
   }
 
+  const clientName =
+    reportData.clientDisplayName ||
+    reportData.clientName ||
+    "Client not provided";
+
+  const jobAddress =
+    reportData.clientAddressSnapshot ||
+    reportData.jobAddress ||
+    "Address not provided";
+
   return (
     <section className="public-report-page">
       <div className="public-report-shell">
-        <div className="public-report-hero">
-          <div>
-            <p className="eyebrow mb-2">Client report</p>
+        <div className="public-report-client-hero">
+          <div className="public-report-brand-row">
+            <div className="public-report-brand">
+              {reportData.businessLogo ? (
+                <img
+                  src={reportData.businessLogo}
+                  alt={`${reportData.businessName || "Business"} logo`}
+                  className="public-report-logo"
+                />
+              ) : (
+                <div className="public-report-logo-fallback">
+                  {(reportData.businessName || "J").charAt(0).toUpperCase()}
+                </div>
+              )}
 
-            <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
-              <h1 className="mb-0">
-                {formatValue(reportData.reportNumber, "Job report")}
-              </h1>
-
-              <span className={`report-status-badge ${reportData.status}`}>
-                {formatStatusLabel(reportData.status)}
-              </span>
+              <div>
+                <p className="eyebrow mb-1">Completed job report</p>
+                <h1>{formatValue(reportData.businessName, "JobProof")}</h1>
+              </div>
             </div>
 
-            <p className="mb-0">
-              Shared by{" "}
-              <strong>{formatValue(reportData.businessName, "JobProof")}</strong>
-            </p>
+            <span className={`report-status-badge ${reportData.status}`}>
+              {formatStatusLabel(reportData.status)}
+            </span>
           </div>
 
-          <button
-            type="button"
-            className="btn btn-success"
-            onClick={() => generatePDF(reportData)}
-          >
-            Download PDF
-          </button>
+          <div className="public-report-hero-body">
+            <div>
+              <p className="public-report-report-number mb-2">
+                {formatValue(reportData.reportNumber, "Job report")}
+              </p>
+
+              <h2>{clientName}</h2>
+
+              <p className="mb-0">{jobAddress}</p>
+            </div>
+
+            <button
+              type="button"
+              className="btn btn-success public-report-download-btn"
+              onClick={() => generatePDF(reportData)}
+            >
+              Download PDF
+            </button>
+          </div>
+        </div>
+
+        <div className="public-report-summary-grid">
+          <div className="public-report-summary-card">
+            <span>Service</span>
+            <strong>{formatValue(reportData.serviceType)}</strong>
+          </div>
+
+          <div className="public-report-summary-card">
+            <span>Job date</span>
+            <strong>{formatDate(reportData.jobDate)}</strong>
+          </div>
+
+          <div className="public-report-summary-card">
+            <span>Total hours</span>
+            <strong>{formatValue(reportData.totalHours, "0")}</strong>
+          </div>
+
+          <div className="public-report-summary-card">
+            <span>Contact</span>
+            <strong>
+              {formatValue(
+                reportData.clientContactPerson ||
+                  reportData.clientEmail ||
+                  reportData.clientPhone
+              )}
+            </strong>
+          </div>
         </div>
 
         <div className="alert alert-light border public-report-note">
-          This is a client-ready shared report. It is available only when the
-          report has been completed and sharing has been enabled by the service
-          provider.
+          This report has been marked as completed and shared by{" "}
+          <strong>{formatValue(reportData.businessName, "the service provider")}</strong>.
         </div>
 
         <ReportPreview reportData={reportData} />
