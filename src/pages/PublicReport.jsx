@@ -321,7 +321,9 @@ const PublicReport = () => {
 
         <div className="alert alert-light border public-report-note">
           This report has been marked as completed and shared by{" "}
-          <strong>{formatValue(reportData.businessName, "the service provider")}</strong>.
+          <strong>
+            {formatValue(reportData.businessName, "the service provider")}
+          </strong>.
         </div>
 
         <ReportPreview reportData={reportData} />
