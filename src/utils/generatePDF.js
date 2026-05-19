@@ -1,29 +1,81 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-const PAGE_WIDTH = 210;
-const PAGE_HEIGHT = 297;
-const MARGIN = 14;
+const PAGE = {
+  margin: 14,
+  width: 210,
+  height: 297,
+};
 
-const BRAND = {
+const COLORS = {
   navy: [15, 23, 42],
   blue: [30, 64, 175],
   amber: [245, 158, 11],
-  lightBg: [248, 250, 252],
-  border: [226, 232, 240],
-  muted: [100, 116, 139],
-  white: [255, 255, 255],
   green: [22, 101, 52],
-  greenBg: [220, 252, 231],
-  yellow: [146, 64, 14],
-  yellowBg: [254, 243, 199],
-  blueBg: [219, 234, 254],
+  slate: [71, 85, 105],
+  lightSlate: [241, 245, 249],
+  border: [226, 232, 240],
+  white: [255, 255, 255],
+};
+
+const formatValue = (value, fallback = "Not provided") => {
+  if (value === 0) return "0";
+  if (!value || String(value).trim() === "") return fallback;
+  return String(value).trim();
+};
+
+const formatStatusLabel = (status) => {
+  if (!status) return "Pending";
+  return String(status).charAt(0).toUpperCase() + String(status).slice(1);
+};
+
+const formatRoleLabel = (role) => {
+  if (!role) return "";
+
+  const roleMap = {
+    lead: "Lead",
+    worker: "Worker",
+    helper: "Helper",
+    supervisor: "Supervisor",
+    admin: "Admin",
+  };
+
+  const normalizedRole = String(role).trim().toLowerCase();
+
+  if (roleMap[normalizedRole]) {
+    return roleMap[normalizedRole];
+  }
+
+  return String(role)
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+};
+
+const formatTeamMember = (member) => {
+  const name =
+    member?.fullName ||
+    member?.full_name ||
+    member?.name ||
+    member?.email ||
+    "Team member";
+
+  const role =
+    member?.roleOnJob ||
+    member?.role_on_job ||
+    member?.role ||
+    "";
+
+  const cleanRole = formatRoleLabel(role);
+
+  if (!cleanRole) return name;
+
+  return `${name} — ${cleanRole}`;
 };
 
 const formatDate = (dateValue) => {
   if (!dateValue) return "Not provided";
 
-  const date = new Date(`${dateValue}T00:00:00`);
+  const date = new Date(dateValue);
 
   if (Number.isNaN(date.getTime())) {
     return dateValue;
@@ -36,494 +88,336 @@ const formatDate = (dateValue) => {
   });
 };
 
-const formatValue = (value, fallback = "Not provided") => {
-  if (value === null || value === undefined || value === "") return fallback;
-  return String(value);
+const formatTime = (timeValue) => {
+  if (!timeValue) return "Not provided";
+  return String(timeValue).slice(0, 5);
 };
 
-const getStatusLabel = (status) => {
-  if (status === "pending") return "Pending";
-  if (status === "checked") return "Checked";
-  if (status === "completed") return "Completed";
-  return "Pending";
+const getStatusColor = (status) => {
+  if (status === "completed") return COLORS.green;
+  if (status === "checked") return COLORS.blue;
+  return COLORS.amber;
 };
 
-const getStatusStyle = (status) => {
-  if (status === "completed") {
-    return {
-      bg: BRAND.greenBg,
-      text: BRAND.green,
-      border: [34, 197, 94],
-    };
-  }
-
-  if (status === "checked") {
-    return {
-      bg: BRAND.blueBg,
-      text: BRAND.blue,
-      border: [30, 64, 175],
-    };
-  }
-
-  return {
-    bg: BRAND.yellowBg,
-    text: BRAND.yellow,
-    border: BRAND.amber,
-  };
+const safeFileName = (value) => {
+  return String(value || "job-report")
+    .replace(/[^a-z0-9-_]+/gi, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase();
 };
 
-const getRoleLabel = (roleOnJob, role) => {
-  if (roleOnJob === "lead") return "Lead";
-  if (roleOnJob === "supervisor") return "Supervisor";
-  if (roleOnJob === "helper") return "Helper";
-
-  if (role === "admin") return "Admin";
-  if (role === "supervisor") return "Supervisor";
-
-  return "Worker";
-};
-
-const loadImage = (src) => {
-  return new Promise((resolve) => {
-    if (!src) {
-      resolve(null);
-      return;
-    }
-
-    const image = new Image();
-    image.crossOrigin = "anonymous";
-
-    image.onload = () => resolve(image);
-    image.onerror = () => resolve(null);
-
-    image.src = src;
-  });
-};
-
-const getImageDimensions = (image, maxWidth, maxHeight) => {
-  const ratio = Math.min(maxWidth / image.width, maxHeight / image.height);
-
-  return {
-    width: image.width * ratio,
-    height: image.height * ratio,
-  };
-};
-
-const addFooter = (doc, pageNumber) => {
-  doc.setDrawColor(...BRAND.border);
-  doc.line(MARGIN, PAGE_HEIGHT - 14, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - 14);
-
-  doc.setFont("helvetica", "normal");
+const addPageFooter = (doc, pageNumber, totalPages) => {
   doc.setFontSize(8);
-  doc.setTextColor(...BRAND.muted);
-  doc.text("Generated with JobProof", MARGIN, PAGE_HEIGHT - 8);
-
-  doc.text(`Page ${pageNumber}`, PAGE_WIDTH - MARGIN, PAGE_HEIGHT - 8, {
-    align: "right",
-  });
-};
-
-const addPageIfNeeded = (doc, currentY, requiredSpace = 30) => {
-  if (currentY + requiredSpace <= PAGE_HEIGHT - 22) {
-    return currentY;
-  }
-
-  doc.addPage();
-  addFooter(doc, doc.getNumberOfPages());
-
-  return 20;
+  doc.setTextColor(...COLORS.slate);
+  doc.text(
+    `Generated by JobProof · Page ${pageNumber} of ${totalPages}`,
+    PAGE.margin,
+    PAGE.height - 8
+  );
 };
 
 const addSectionTitle = (doc, title, y) => {
-  const nextY = addPageIfNeeded(doc, y, 18);
-
   doc.setFont("helvetica", "bold");
   doc.setFontSize(13);
-  doc.setTextColor(...BRAND.navy);
-  doc.text(title, MARGIN, nextY);
-
-  doc.setDrawColor(...BRAND.amber);
-  doc.setLineWidth(0.8);
-  doc.line(MARGIN, nextY + 3, MARGIN + 26, nextY + 3);
-
-  return nextY + 10;
+  doc.setTextColor(...COLORS.navy);
+  doc.text(title, PAGE.margin, y);
+  return y + 5;
 };
 
-const addStatusBadge = (doc, reportData, x, y) => {
-  const status = reportData.status || "pending";
-  const label = getStatusLabel(status);
-  const style = getStatusStyle(status);
+const addTable = (doc, title, rows, y) => {
+  const cleanRows = rows.filter((row) => {
+    return row.some((cell) => cell !== undefined && cell !== null);
+  });
 
-  const badgeWidth = Math.max(36, doc.getTextWidth(label) + 18);
-  const badgeHeight = 8;
+  if (!cleanRows.length) return y;
 
-  doc.setFillColor(...style.bg);
-  doc.setDrawColor(...style.border);
-  doc.roundedRect(x, y, badgeWidth, badgeHeight, 4, 4, "FD");
+  const titleY = addSectionTitle(doc, title, y);
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
-  doc.setTextColor(...style.text);
-  doc.text(label, x + badgeWidth / 2, y + 5.4, { align: "center" });
+  autoTable(doc, {
+    startY: titleY,
+    head: [["Field", "Details"]],
+    body: cleanRows,
+    theme: "grid",
+    margin: {
+      left: PAGE.margin,
+      right: PAGE.margin,
+    },
+    styles: {
+      font: "helvetica",
+      fontSize: 9,
+      cellPadding: 3,
+      textColor: COLORS.navy,
+      lineColor: COLORS.border,
+      lineWidth: 0.2,
+      valign: "top",
+    },
+    headStyles: {
+      fillColor: COLORS.blue,
+      textColor: COLORS.white,
+      fontStyle: "bold",
+    },
+    columnStyles: {
+      0: {
+        cellWidth: 48,
+        fontStyle: "bold",
+        fillColor: COLORS.lightSlate,
+      },
+      1: {
+        cellWidth: "auto",
+      },
+    },
+  });
 
-  return badgeWidth;
+  return doc.lastAutoTable.finalY + 10;
 };
 
-const addHeader = async (doc, reportData) => {
-  doc.setFillColor(...BRAND.navy);
-  doc.rect(0, 0, PAGE_WIDTH, 42, "F");
+const addTextBox = (doc, title, text, y) => {
+  const cleanText = formatValue(text, "No details provided.");
+  const maxWidth = PAGE.width - PAGE.margin * 2;
+  const lines = doc.splitTextToSize(cleanText, maxWidth - 8);
 
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(...BRAND.amber);
-  doc.text("JOBPROOF", MARGIN, 13);
+  const boxHeight = Math.max(18, lines.length * 5 + 14);
 
-  doc.setFontSize(18);
-  doc.setTextColor(...BRAND.white);
-  doc.text(formatValue(reportData.reportNumber, "Draft report"), MARGIN, 25);
+  if (y + boxHeight > PAGE.height - 20) {
+    doc.addPage();
+    y = 20;
+  }
 
-  const badgeX = MARGIN;
-  const badgeY = 30;
-  const badgeWidth = addStatusBadge(doc, reportData, badgeX, badgeY);
+  y = addSectionTitle(doc, title, y);
 
-  const companyX = badgeX + badgeWidth + 6;
+  doc.setDrawColor(...COLORS.border);
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(PAGE.margin, y, maxWidth, boxHeight, 2, 2, "FD");
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
-  doc.setTextColor(...BRAND.white);
-  doc.text(
-    formatValue(reportData.businessName, "Business name not set"),
-    companyX,
-    35.4
-  );
+  doc.setTextColor(...COLORS.navy);
+  doc.text(lines, PAGE.margin + 4, y + 8);
 
-  const logo = await loadImage(reportData.businessLogo);
+  return y + boxHeight + 10;
+};
 
-  if (logo) {
-    const dimensions = getImageDimensions(logo, 24, 24);
-    doc.setFillColor(...BRAND.white);
-    doc.roundedRect(PAGE_WIDTH - MARGIN - 28, 7, 28, 28, 3, 3, "F");
+const convertImageToDataUrl = async (imageUrl) => {
+  if (!imageUrl || typeof imageUrl !== "string") return null;
 
-    const imageFormat =
-      reportData.businessLogo?.startsWith("data:image/png") ? "PNG" : "JPEG";
-
-    doc.addImage(
-      logo,
-      imageFormat,
-      PAGE_WIDTH - MARGIN - 26 + (24 - dimensions.width) / 2,
-      9 + (24 - dimensions.height) / 2,
-      dimensions.width,
-      dimensions.height
-    );
+  if (imageUrl.startsWith("data:image")) {
+    return imageUrl;
   }
 
-  return 54;
-};
+  try {
+    const response = await fetch(imageUrl);
+    const blob = await response.blob();
 
-const addInfoTable = (doc, title, rows, y) => {
-  let currentY = addSectionTitle(doc, title, y);
+    return await new Promise((resolve) => {
+      const reader = new FileReader();
 
-  autoTable(doc, {
-    startY: currentY,
-    theme: "grid",
-    head: [["Field", "Details"]],
-    body: rows,
-    margin: { left: MARGIN, right: MARGIN },
-    styles: {
-      font: "helvetica",
-      fontSize: 9,
-      cellPadding: 3,
-      lineColor: BRAND.border,
-      lineWidth: 0.2,
-      textColor: BRAND.navy,
-      valign: "middle",
-    },
-    headStyles: {
-      fillColor: BRAND.blue,
-      textColor: BRAND.white,
-      fontStyle: "bold",
-    },
-    columnStyles: {
-      0: {
-        cellWidth: 45,
-        fontStyle: "bold",
-        fillColor: BRAND.lightBg,
-      },
-      1: {
-        cellWidth: "auto",
-      },
-    },
-  });
+      reader.onloadend = () => {
+        resolve(reader.result);
+      };
 
-  return doc.lastAutoTable.finalY + 10;
-};
+      reader.onerror = () => {
+        resolve(null);
+      };
 
-const addTeamInvolved = (doc, reportData, y) => {
-  const teamInvolved = reportData.teamInvolved || [];
-
-  let currentY = addSectionTitle(doc, "Team involved", y);
-
-  if (teamInvolved.length === 0) {
-    autoTable(doc, {
-      startY: currentY,
-      theme: "grid",
-      body: [["No team members recorded for this job."]],
-      margin: { left: MARGIN, right: MARGIN },
-      styles: {
-        font: "helvetica",
-        fontSize: 9,
-        cellPadding: 4,
-        lineColor: BRAND.border,
-        textColor: BRAND.muted,
-      },
+      reader.readAsDataURL(blob);
     });
-
-    return doc.lastAutoTable.finalY + 10;
+  } catch (error) {
+    console.warn("Could not load image for PDF:", error);
+    return null;
   }
-
-  const rows = teamInvolved.map((member, index) => [
-    String(index + 1).padStart(2, "0"),
-    formatValue(member.fullName, "Unknown user"),
-    formatValue(member.email, "Not provided"),
-    getRoleLabel(member.roleOnJob, member.role),
-  ]);
-
-  autoTable(doc, {
-    startY: currentY,
-    theme: "grid",
-    head: [["#", "Name", "Email", "Job role"]],
-    body: rows,
-    margin: { left: MARGIN, right: MARGIN },
-    styles: {
-      font: "helvetica",
-      fontSize: 9,
-      cellPadding: 3,
-      lineColor: BRAND.border,
-      lineWidth: 0.2,
-      textColor: BRAND.navy,
-      valign: "middle",
-    },
-    headStyles: {
-      fillColor: BRAND.blue,
-      textColor: BRAND.white,
-      fontStyle: "bold",
-    },
-    columnStyles: {
-      0: {
-        cellWidth: 13,
-        halign: "center",
-        fontStyle: "bold",
-      },
-      1: {
-        cellWidth: 48,
-        fontStyle: "bold",
-      },
-      2: {
-        cellWidth: 70,
-      },
-      3: {
-        cellWidth: 35,
-        halign: "center",
-      },
-    },
-    didParseCell: (data) => {
-      if (data.section === "body" && data.column.index === 3) {
-        data.cell.styles.fontStyle = "bold";
-        data.cell.styles.textColor = BRAND.blue;
-      }
-    },
-  });
-
-  return doc.lastAutoTable.finalY + 10;
 };
 
-const addNotes = (doc, reportData, y) => {
-  let currentY = addSectionTitle(doc, "Work notes", y);
+const addImageGrid = async (doc, title, photos = [], y) => {
+  const validPhotos = photos.filter(Boolean);
 
-  const rows = [
-    ["Work completed", formatValue(reportData.workCompleted)],
-    ["Issues found", formatValue(reportData.issuesFound)],
-    ["Recommendations", formatValue(reportData.recommendations)],
-  ];
-
-  autoTable(doc, {
-    startY: currentY,
-    theme: "grid",
-    body: rows,
-    margin: { left: MARGIN, right: MARGIN },
-    styles: {
-      font: "helvetica",
-      fontSize: 9,
-      cellPadding: 4,
-      lineColor: BRAND.border,
-      lineWidth: 0.2,
-      textColor: BRAND.navy,
-      valign: "top",
-    },
-    columnStyles: {
-      0: {
-        cellWidth: 45,
-        fontStyle: "bold",
-        fillColor: BRAND.lightBg,
-      },
-      1: {
-        cellWidth: "auto",
-      },
-    },
-  });
-
-  return doc.lastAutoTable.finalY + 10;
-};
-
-const addPhotosSection = async (doc, title, photos, y) => {
-  let currentY = addSectionTitle(doc, title, y);
-
-  if (!photos || photos.length === 0) {
-    autoTable(doc, {
-      startY: currentY,
-      theme: "grid",
-      body: [[`No ${title.toLowerCase()} uploaded.`]],
-      margin: { left: MARGIN, right: MARGIN },
-      styles: {
-        font: "helvetica",
-        fontSize: 9,
-        cellPadding: 4,
-        lineColor: BRAND.border,
-        textColor: BRAND.muted,
-      },
-    });
-
-    return doc.lastAutoTable.finalY + 10;
+  if (!validPhotos.length) {
+    return y;
   }
 
-  const imageWidth = 82;
-  const imageHeight = 62;
+  if (y > PAGE.height - 70) {
+    doc.addPage();
+    y = 20;
+  }
+
+  y = addSectionTitle(doc, title, y);
+
+  const imageWidth = 84;
+  const imageHeight = 58;
   const gap = 10;
-  const leftX = MARGIN;
-  const rightX = MARGIN + imageWidth + gap;
+  const leftX = PAGE.margin;
+  const rightX = PAGE.margin + imageWidth + gap;
 
-  for (let index = 0; index < photos.length; index += 1) {
-    const isLeft = index % 2 === 0;
-    const x = isLeft ? leftX : rightX;
+  let x = leftX;
 
-    if (isLeft) {
-      currentY = addPageIfNeeded(doc, currentY, imageHeight + 16);
+  for (let index = 0; index < validPhotos.length; index += 1) {
+    if (y + imageHeight + 12 > PAGE.height - 20) {
+      doc.addPage();
+      y = 20;
+      y = addSectionTitle(doc, title, y);
+      x = leftX;
     }
 
-    const image = await loadImage(photos[index]);
+    const photoUrl = validPhotos[index];
+    const imageData = await convertImageToDataUrl(photoUrl);
 
-    doc.setDrawColor(...BRAND.border);
-    doc.setFillColor(...BRAND.lightBg);
-    doc.roundedRect(x, currentY, imageWidth, imageHeight, 3, 3, "FD");
-
-    if (image) {
-      const dimensions = getImageDimensions(
-        image,
-        imageWidth - 6,
-        imageHeight - 12
-      );
-
-      const format = photos[index]?.startsWith("data:image/png") ? "PNG" : "JPEG";
-
-      doc.addImage(
-        image,
-        format,
-        x + (imageWidth - dimensions.width) / 2,
-        currentY + 5,
-        dimensions.width,
-        dimensions.height
-      );
-    } else {
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      doc.setTextColor(...BRAND.muted);
-      doc.text("Image unavailable", x + imageWidth / 2, currentY + 32, {
-        align: "center",
-      });
-    }
+    doc.setDrawColor(...COLORS.border);
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(x, y, imageWidth, imageHeight, 2, 2, "FD");
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
-    doc.setTextColor(...BRAND.navy);
-    doc.text(
-      `${title.replace(" photos", "")} photo ${index + 1}`,
-      x + 4,
-      currentY + imageHeight - 4
-    );
+    doc.setTextColor(...COLORS.slate);
+    doc.text(`${title.replace(" photos", "")} photo ${index + 1}`, x + 3, y + 5);
 
-    if (!isLeft || index === photos.length - 1) {
-      currentY += imageHeight + 10;
+    if (imageData) {
+      try {
+        doc.addImage(imageData, "JPEG", x + 3, y + 8, imageWidth - 6, imageHeight - 11);
+      } catch {
+        try {
+          doc.addImage(imageData, "PNG", x + 3, y + 8, imageWidth - 6, imageHeight - 11);
+        } catch (error) {
+          console.warn("Could not add image to PDF:", error);
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(8);
+          doc.text("Image could not be loaded.", x + 6, y + 30);
+        }
+      }
+    } else {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.text("Image could not be loaded.", x + 6, y + 30);
+    }
+
+    if (x === leftX) {
+      x = rightX;
+    } else {
+      x = leftX;
+      y += imageHeight + 12;
     }
   }
 
-  return currentY + 4;
+  if (x !== leftX) {
+    y += imageHeight + 12;
+  }
+
+  return y + 2;
 };
 
-export const generatePDF = async (reportData) => {
+const addHeader = async (doc, reportData) => {
+  doc.setFillColor(...COLORS.navy);
+  doc.rect(0, 0, PAGE.width, 36, "F");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.setTextColor(...COLORS.white);
+  doc.text("JOBPROOF", PAGE.margin, 15);
+
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.text("Professional job completion report", PAGE.margin, 22);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.text(formatValue(reportData.reportNumber, "Report number pending"), PAGE.margin, 30);
+
+  const status = reportData.status || "pending";
+  const statusColor = getStatusColor(status);
+
+  doc.setFillColor(...statusColor);
+  doc.roundedRect(150, 11, 42, 10, 2, 2, "F");
+
+  doc.setFontSize(8);
+  doc.setTextColor(...COLORS.white);
+  doc.text(formatStatusLabel(status).toUpperCase(), 171, 17.5, {
+    align: "center",
+  });
+
+  if (reportData.businessLogo) {
+    const logoData = await convertImageToDataUrl(reportData.businessLogo);
+
+    if (logoData) {
+      try {
+        doc.addImage(logoData, "JPEG", 172, 23, 20, 10);
+      } catch {
+        try {
+          doc.addImage(logoData, "PNG", 172, 23, 20, 10);
+        } catch {
+          // Ignore logo errors.
+        }
+      }
+    }
+  }
+
+  return 48;
+};
+
+export const generatePDF = async (reportData = {}) => {
   const doc = new jsPDF("p", "mm", "a4");
 
-  let currentY = await addHeader(doc, reportData);
+  let y = await addHeader(doc, reportData);
 
-  addFooter(doc, 1);
-
-  currentY = addInfoTable(
+  y = addTable(
     doc,
     "Business details",
     [
-      ["Business", formatValue(reportData.businessName)],
-      ["Email", formatValue(reportData.businessEmail)],
-      ["Phone", formatValue(reportData.businessPhone)],
-      ["Created by", formatValue(reportData.workerName)],
+      ["Business name", formatValue(reportData.businessName)],
+      ["Business email", formatValue(reportData.businessEmail)],
+      ["Business phone", formatValue(reportData.businessPhone)],
+      ["Prepared by", formatValue(reportData.workerName)],
     ],
-    currentY
+    y
   );
 
-  currentY = addInfoTable(
+  y = addTable(
     doc,
     "Client and job details",
     [
-      ["Status", getStatusLabel(reportData.status)],
-      ["Client", formatValue(reportData.clientName)],
-      ["Job address", formatValue(reportData.jobAddress)],
+      ["Status", formatStatusLabel(reportData.status || "pending")],
+      ["Client", formatValue(reportData.clientDisplayName || reportData.clientName)],
+      ["Client company", formatValue(reportData.clientCompanyName)],
+      ["Contact person", formatValue(reportData.clientContactPerson)],
+      ["Client email", formatValue(reportData.clientEmail)],
+      ["Client phone", formatValue(reportData.clientPhone)],
+      [
+        "Job address",
+        formatValue(reportData.clientAddressSnapshot || reportData.jobAddress),
+      ],
       ["Job date", formatDate(reportData.jobDate)],
-      ["Starting hour", formatValue(reportData.startingHour)],
-      ["Finish hour", formatValue(reportData.finishHour)],
-      ["Total hours", formatValue(reportData.totalHours, "Not calculated")],
+      ["Start time", formatTime(reportData.startingHour)],
+      ["Finish time", formatTime(reportData.finishHour)],
+      ["Total hours", formatValue(reportData.totalHours, "0")],
       ["Service type", formatValue(reportData.serviceType)],
+      ["Access notes", formatValue(reportData.clientAccessNotes)],
     ],
-    currentY
+    y
   );
 
-  currentY = addTeamInvolved(doc, reportData, currentY);
-  currentY = addNotes(doc, reportData, currentY);
+  const teamRows =
+    reportData.teamInvolved && reportData.teamInvolved.length > 0
+      ? reportData.teamInvolved.map((member, index) => [
+          `Team member ${index + 1}`,
+          formatTeamMember(member),
+        ])
+      : [["Team involved", "No team members listed."]];
 
-  currentY = await addPhotosSection(
-    doc,
-    "Before photos",
-    reportData.beforePhotos || [],
-    currentY
-  );
+  y = addTable(doc, "Team involved", teamRows, y);
 
-  currentY = await addPhotosSection(
-    doc,
-    "After photos",
-    reportData.afterPhotos || [],
-    currentY
-  );
+  y = addTextBox(doc, "Work completed", reportData.workCompleted, y);
+  y = addTextBox(doc, "Issues found", reportData.issuesFound, y);
+  y = addTextBox(doc, "Recommendations", reportData.recommendations, y);
 
-  const totalPages = doc.getNumberOfPages();
+  y = await addImageGrid(doc, "Before photos", reportData.beforePhotos || [], y);
+  y = await addImageGrid(doc, "After photos", reportData.afterPhotos || [], y);
+
+  const totalPages = doc.internal.getNumberOfPages();
 
   for (let page = 1; page <= totalPages; page += 1) {
     doc.setPage(page);
-    addFooter(doc, page);
+    addPageFooter(doc, page, totalPages);
   }
 
-  const fileName = `${formatValue(
-    reportData.reportNumber,
-    "jobproof-report"
-  )}.pdf`;
+  const fileName = `${safeFileName(reportData.reportNumber || "job-report")}.pdf`;
 
   doc.save(fileName);
 };
-
-export default generatePDF;
