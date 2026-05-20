@@ -4323,3 +4323,73 @@ textarea:focus::placeholder {
     grid-template-columns: 1fr;
   }
 }
+/* Internal notes */
+
+.internal-notes-box {
+  padding: 18px;
+  border-radius: 22px;
+  background: #fffbeb;
+  border: 1px solid rgba(245, 158, 11, 0.22);
+}
+
+.internal-notes-box h3 {
+  color: var(--jp-navy);
+}
+
+.internal-notes-box .form-label {
+  font-weight: 750;
+}
+/* Internal notes view */
+
+.internal-view-notes-card {
+  border-radius: 24px;
+  border: 1px solid rgba(245, 158, 11, 0.2) !important;
+}
+
+.internal-notes-private-badge {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 11px;
+  border-radius: 999px;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.internal-view-notes-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.internal-view-note-box {
+  padding: 16px;
+  border-radius: 18px;
+  background: #fffbeb;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.internal-view-note-box span {
+  display: block;
+  margin-bottom: 6px;
+  color: #92400e;
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.internal-view-note-box p {
+  margin: 0;
+  color: #334155;
+  white-space: pre-wrap;
+}
+
+.report-preview-internal-section {
+  background: #fffbeb;
+  border-color: rgba(245, 158, 11, 0.28);
+}

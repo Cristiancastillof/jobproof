@@ -9,7 +9,15 @@ const formatStatusLabel = (status) => {
   return status.charAt(0).toUpperCase() + status.slice(1);
 };
 
-const ReportPreview = ({ reportData }) => {
+const hasInternalNotes = (reportData) => {
+  return Boolean(
+    reportData?.internalNotes ||
+      reportData?.supervisorNotes ||
+      reportData?.completionNotes
+  );
+};
+
+const ReportPreview = ({ reportData, showInternalNotes = false }) => {
   const status = reportData.status || "pending";
 
   const hasClientContact =
@@ -204,6 +212,31 @@ const ReportPreview = ({ reportData }) => {
           </p>
         </div>
       </div>
+
+      {showInternalNotes && hasInternalNotes(reportData) && (
+        <div className="report-preview-section report-preview-internal-section">
+          <h4>Internal team notes</h4>
+
+          <div className="report-preview-note">
+            <span>Internal notes</span>
+            <p>{formatValue(reportData.internalNotes, "No internal notes.")}</p>
+          </div>
+
+          <div className="report-preview-note">
+            <span>Supervisor notes</span>
+            <p>
+              {formatValue(reportData.supervisorNotes, "No supervisor notes.")}
+            </p>
+          </div>
+
+          <div className="report-preview-note">
+            <span>Completion notes</span>
+            <p>
+              {formatValue(reportData.completionNotes, "No completion notes.")}
+            </p>
+          </div>
+        </div>
+      )}
 
       {renderPhotos("Before photos", reportData.beforePhotos)}
       {renderPhotos("After photos", reportData.afterPhotos)}

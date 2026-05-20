@@ -631,6 +631,63 @@ const ReportForm = ({
           </div>
         </div>
 
+        <div className="mb-4 internal-notes-box">
+          <div className="d-flex justify-content-between align-items-start gap-3 mb-3">
+            <div>
+              <h3 className="h5 mb-1">Internal team notes</h3>
+              <p className="text-muted small mb-0">
+                These notes are for your internal team. They are not shown in the
+                public client view.
+              </p>
+            </div>
+          </div>
+
+          <div className="mb-3">
+            <label htmlFor="internalNotes" className="form-label">
+              Internal notes
+            </label>
+            <textarea
+              id="internalNotes"
+              className="form-control"
+              rows="3"
+              name="internalNotes"
+              value={reportData.internalNotes || ""}
+              onChange={handleChange}
+              placeholder="Internal notes for the team. Example: client requested extra service, access issue, invoice reminder..."
+            />
+          </div>
+
+          <div className="mb-3">
+            <label htmlFor="supervisorNotes" className="form-label">
+              Supervisor notes
+            </label>
+            <textarea
+              id="supervisorNotes"
+              className="form-control"
+              rows="3"
+              name="supervisorNotes"
+              value={reportData.supervisorNotes || ""}
+              onChange={handleChange}
+              placeholder="Supervisor review notes. Example: photos checked, quality approved, follow-up required..."
+            />
+          </div>
+
+          <div>
+            <label htmlFor="completionNotes" className="form-label">
+              Completion notes
+            </label>
+            <textarea
+              id="completionNotes"
+              className="form-control"
+              rows="3"
+              name="completionNotes"
+              value={reportData.completionNotes || ""}
+              onChange={handleChange}
+              placeholder="Completion notes. Example: completed with extra time, client notified, ready to invoice..."
+            />
+          </div>
+        </div>
+
         <div>
           <h3 className="h5 mb-3">Photos</h3>
 

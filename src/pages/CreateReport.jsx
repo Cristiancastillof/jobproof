@@ -49,6 +49,11 @@ const createEmptyReport = () => ({
   workCompleted: "",
   issuesFound: "",
   recommendations: "",
+
+  internalNotes: "",
+  supervisorNotes: "",
+  completionNotes: "",
+
   status: "pending",
   beforePhotos: [],
   afterPhotos: [],
@@ -158,6 +163,11 @@ const mapSupabaseReportToForm = ({
     workCompleted: report.work_completed || "",
     issuesFound: report.issues_found || "",
     recommendations: report.recommendations || "",
+
+    internalNotes: report.internal_notes || "",
+    supervisorNotes: report.supervisor_notes || "",
+    completionNotes: report.completion_notes || "",
+
     status: report.status || "pending",
     beforePhotos,
     afterPhotos,
@@ -193,6 +203,11 @@ const buildSupabasePayload = ({ reportData, profile, user }) => ({
   work_completed: reportData.workCompleted,
   issues_found: reportData.issuesFound,
   recommendations: reportData.recommendations,
+
+  internal_notes: reportData.internalNotes || "",
+  supervisor_notes: reportData.supervisorNotes || "",
+  completion_notes: reportData.completionNotes || "",
+
   status: reportData.status || "pending",
   updated_at: new Date().toISOString(),
 });
@@ -916,6 +931,10 @@ const CreateReport = () => {
         clientAccessNotes:
           savedReport.client_access_notes || reportData.clientAccessNotes,
 
+        internalNotes: savedReport.internal_notes || "",
+        supervisorNotes: savedReport.supervisor_notes || "",
+        completionNotes: savedReport.completion_notes || "",
+
         teamInvolved: savedTeamInvolved,
         status: savedReport.status || "pending",
         totalHours: savedReport.total_hours || finalTotalHours,
@@ -934,10 +953,10 @@ const CreateReport = () => {
       setMessage({
         type: "success",
         text: hasNewPhotos
-          ? "Report, client, status, team and photos saved successfully."
+          ? "Report, client, internal notes, status, team and photos saved successfully."
           : isEditMode
-          ? "Report, client, status and team updated successfully."
-          : "Report, client, status and team saved successfully.",
+          ? "Report, client, internal notes, status and team updated successfully."
+          : "Report, client, internal notes, status and team saved successfully.",
       });
 
       if (!isEditMode) {

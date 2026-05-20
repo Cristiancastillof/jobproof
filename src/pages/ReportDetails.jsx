@@ -51,6 +51,14 @@ const formatActivityDate = (dateValue) => {
   });
 };
 
+const hasInternalNotes = (reportData) => {
+  return Boolean(
+    reportData?.internalNotes ||
+      reportData?.supervisorNotes ||
+      reportData?.completionNotes
+  );
+};
+
 const ActivityTimeline = ({ activityItems = [] }) => {
   if (!activityItems.length) {
     return (
@@ -116,6 +124,63 @@ const ActivityTimeline = ({ activityItems = [] }) => {
   );
 };
 
+const InternalNotesPanel = ({ reportData }) => {
+  if (!hasInternalNotes(reportData)) {
+    return (
+      <div className="card shadow-sm border-0 internal-view-notes-card mb-4">
+        <div className="card-body p-4">
+          <p className="eyebrow mb-2">Internal team notes</p>
+
+          <h2 className="h5 mb-2">No internal notes added</h2>
+
+          <p className="text-muted mb-0">
+            Internal, supervisor and completion notes will appear here. These
+            notes are not shown in the public client view.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card shadow-sm border-0 internal-view-notes-card mb-4">
+      <div className="card-body p-4">
+        <p className="eyebrow mb-2">Internal team notes</p>
+
+        <div className="d-flex flex-column flex-lg-row justify-content-between gap-2 mb-3">
+          <div>
+            <h2 className="h5 mb-1">Private report notes</h2>
+
+            <p className="text-muted mb-0">
+              These notes are visible only inside JobProof. They are not shown to
+              the client.
+            </p>
+          </div>
+
+          <span className="internal-notes-private-badge">Internal only</span>
+        </div>
+
+        <div className="internal-view-notes-grid">
+          <div className="internal-view-note-box">
+            <span>Internal notes</span>
+            <p>{reportData.internalNotes || "No internal notes added."}</p>
+          </div>
+
+          <div className="internal-view-note-box">
+            <span>Supervisor notes</span>
+            <p>{reportData.supervisorNotes || "No supervisor notes added."}</p>
+          </div>
+
+          <div className="internal-view-note-box">
+            <span>Completion notes</span>
+            <p>{reportData.completionNotes || "No completion notes added."}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const mapReportToPreviewData = ({
   report,
   company,
@@ -169,6 +234,11 @@ const mapReportToPreviewData = ({
     workCompleted: report.work_completed || "",
     issuesFound: report.issues_found || "",
     recommendations: report.recommendations || "",
+
+    internalNotes: report.internal_notes || "",
+    supervisorNotes: report.supervisor_notes || "",
+    completionNotes: report.completion_notes || "",
+
     status: report.status || "pending",
     teamInvolved,
     beforePhotos,
@@ -583,7 +653,7 @@ const ReportDetails = () => {
           </div>
 
           <p className="section-subtitle mb-0">
-            Full client, job, team, status and photo details.
+            Full client, job, team, status, internal notes and photo details.
           </p>
         </div>
 
@@ -741,9 +811,11 @@ const ReportDetails = () => {
         </div>
       </div>
 
+      <InternalNotesPanel reportData={reportData} />
+
       <ActivityTimeline activityItems={activityItems} />
 
-      <ReportPreview reportData={reportData} />
+      <ReportPreview reportData={reportData} showInternalNotes={false} />
     </section>
   );
 };
