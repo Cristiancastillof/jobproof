@@ -4393,3 +4393,56 @@ textarea:focus::placeholder {
   background: #fffbeb;
   border-color: rgba(245, 158, 11, 0.28);
 }
+/* Navbar role permissions */
+
+.jobproof-navbar {
+  z-index: 1030;
+}
+
+.jobproof-navbar .navbar-brand {
+  color: var(--jp-navy);
+  letter-spacing: -0.03em;
+}
+
+.jobproof-navbar .nav-link {
+  color: #475569;
+  font-weight: 750;
+}
+
+.jobproof-navbar .nav-link.active {
+  color: var(--jp-blue);
+}
+
+.navbar-user-summary {
+  line-height: 1.1;
+}
+
+.navbar-user-name {
+  display: block;
+  color: var(--jp-navy);
+  font-size: 0.88rem;
+  font-weight: 850;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.navbar-user-role {
+  display: block;
+  color: #64748b;
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+@media (max-width: 991px) {
+  .navbar-user-summary {
+    text-align: left;
+    margin-top: 8px;
+  }
+
+  .navbar-user-name {
+    max-width: 100%;
+  }
+}

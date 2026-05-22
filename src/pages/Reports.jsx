@@ -58,22 +58,30 @@ const getClientAddress = (report) => {
   );
 };
 
-const canEditReport = ({ report, profile, user }) => {
-  if (!report || !profile || !user) return false;
-
-  return (
-    profile.role === "admin" ||
-    profile.role === "supervisor" ||
-    report.created_by === user.id
-  );
-};
-
 const canManageStatus = (profile) => {
   return profile?.role === "admin" || profile?.role === "supervisor";
 };
 
-const canSendReport = (report) => {
+const canEditReport = ({ report, profile, user }) => {
+  if (!report || !profile || !user) return false;
+
+  if (profile.role === "admin" || profile.role === "supervisor") {
+    return true;
+  }
+
+  if (profile.role === "worker") {
+    return report.created_by === user.id && report.status !== "completed";
+  }
+
+  return false;
+};
+
+const canSendReport = (report, profile) => {
+  const isAdminOrSupervisor =
+    profile?.role === "admin" || profile?.role === "supervisor";
+
   return (
+    isAdminOrSupervisor &&
     report?.status === "completed" &&
     Boolean(report?.client_email) &&
     Boolean(report?.public_share_enabled) &&
@@ -95,6 +103,8 @@ const Reports = () => {
   const [message, setMessage] = useState(null);
 
   const canUpdateStatus = canManageStatus(profile);
+  const isAdminOrSupervisor =
+    profile?.role === "admin" || profile?.role === "supervisor";
 
   const filteredReports = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -330,7 +340,7 @@ const Reports = () => {
   };
 
   const handleEnableSharing = async (report) => {
-    if (!canUpdateStatus) {
+    if (!isAdminOrSupervisor) {
       setMessage({
         type: "warning",
         text: "Only admins and supervisors can enable client sharing.",
@@ -492,13 +502,11 @@ const Reports = () => {
   const renderShareActions = (report, size = "") => {
     const buttonSizeClass = size ? `btn-${size}` : "";
 
-    if (report.status !== "completed") {
+    if (!isAdminOrSupervisor || report.status !== "completed") {
       return null;
     }
 
     if (!report.public_share_enabled) {
-      if (!canUpdateStatus) return null;
-
       return (
         <button
           type="button"
@@ -529,7 +537,7 @@ const Reports = () => {
           {copiedMessageReportId === report.id ? "Copied!" : "Copy message"}
         </button>
 
-        {canSendReport(report) && (
+        {canSendReport(report, profile) && (
           <a
             className={`btn ${buttonSizeClass} btn-primary`}
             href={buildClientReportMailtoLink(report)}
@@ -603,6 +611,14 @@ const Reports = () => {
       {message && (
         <div className={`alert alert-${message.type}`} role="alert">
           {message.text}
+        </div>
+      )}
+
+      {profile?.role === "worker" && (
+        <div className="alert alert-light border" role="alert">
+          Workers can create and edit their own reports while they are Pending or
+          Checked. Completed reports can only be changed by a supervisor or
+          admin.
         </div>
       )}
 
@@ -787,6 +803,14 @@ const Reports = () => {
                                 Edit
                               </Link>
                             )}
+
+                            {!editable &&
+                              profile?.role === "worker" &&
+                              report.status === "completed" && (
+                                <span className="btn btn-sm btn-outline-secondary disabled">
+                                  Locked
+                                </span>
+                              )}
                           </div>
                         </td>
                       </tr>
@@ -864,6 +888,14 @@ const Reports = () => {
                         Edit
                       </Link>
                     )}
+
+                    {!editable &&
+                      profile?.role === "worker" &&
+                      report.status === "completed" && (
+                        <span className="btn btn-sm btn-outline-secondary disabled">
+                          Locked
+                        </span>
+                      )}
                   </div>
 
                   {report.status === "completed" && !report.client_email && (
@@ -872,11 +904,19 @@ const Reports = () => {
                     </p>
                   )}
 
-                  {report.status === "completed" &&
+                  {isAdminOrSupervisor &&
+                    report.status === "completed" &&
                     report.client_email &&
                     !report.public_share_enabled && (
                       <p className="text-muted small mt-3 mb-0">
                         Enable sharing before sending the client link.
+                      </p>
+                    )}
+
+                  {profile?.role === "worker" &&
+                    report.status === "completed" && (
+                      <p className="text-muted small mt-3 mb-0">
+                        This report is completed and locked for workers.
                       </p>
                     )}
                 </article>

@@ -314,6 +314,10 @@ const CreateReport = () => {
   const [savingReport, setSavingReport] = useState(false);
   const [message, setMessage] = useState(null);
 
+  const isWorker = profile?.role === "worker";
+  const isCompletedReport = reportData?.status === "completed";
+  const workerCannotEditCompletedReport = isWorker && isCompletedReport;
+
   const canCreateReport = useMemo(() => {
     return Boolean(user?.id && profile?.company_id);
   }, [user, profile]);
@@ -803,6 +807,22 @@ const CreateReport = () => {
   };
 
   const handleSaveReport = async () => {
+    if (workerCannotEditCompletedReport) {
+      setMessage({
+        type: "warning",
+        text: "This report is completed. Workers cannot edit completed reports. Please contact a supervisor or admin.",
+      });
+      return;
+    }
+
+    if (isWorker && reportData.status === "completed") {
+      setMessage({
+        type: "warning",
+        text: "Workers cannot mark reports as Completed. Please set the report to Pending or Checked.",
+      });
+      return;
+    }
+
     if (!canCreateReport) {
       setMessage({
         type: "warning",
@@ -1104,7 +1124,7 @@ const CreateReport = () => {
           <button
             className="btn btn-primary"
             onClick={handleSaveReport}
-            disabled={savingReport}
+            disabled={savingReport || workerCannotEditCompletedReport}
           >
             {savingReport
               ? "Saving..."
@@ -1137,6 +1157,13 @@ const CreateReport = () => {
         </div>
       )}
 
+      {workerCannotEditCompletedReport && (
+        <div className="alert alert-warning" role="alert">
+          This report is completed. Workers can view it, but only supervisors or
+          admins can edit completed reports.
+        </div>
+      )}
+
       <div className="row g-4">
         <div className="col-lg-7">
           <ReportForm
@@ -1162,7 +1189,7 @@ const CreateReport = () => {
         <button
           className="btn btn-primary"
           onClick={handleSaveReport}
-          disabled={savingReport}
+          disabled={savingReport || workerCannotEditCompletedReport}
         >
           {savingReport ? "Saving..." : isEditMode ? "Update" : "Save"}
         </button>
