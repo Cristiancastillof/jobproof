@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import InstallAppButton from "../components/InstallAppButton";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 
@@ -153,7 +154,9 @@ const Dashboard = () => {
         const { data: visibleReportsData, error: visibleReportsError } =
           await supabase
             .from("reports")
-            .select("id, report_number, client_name, service_type, job_date, created_at, status, created_by")
+            .select(
+              "id, report_number, client_name, service_type, job_date, created_at, status, created_by"
+            )
             .eq("company_id", profile.company_id)
             .order("created_at", { ascending: false });
 
@@ -308,6 +311,8 @@ const Dashboard = () => {
 
   return (
     <section>
+      <InstallAppButton />
+
       <div className="dashboard-hero mb-4">
         <div>
           <p className="eyebrow mb-2">{roleCopy.label}</p>
