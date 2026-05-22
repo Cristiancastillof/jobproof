@@ -1,4 +1,4 @@
-const CACHE_NAME = "jobproof-pwa-v1";
+const CACHE_NAME = "jobproof-pwa-v2";
 
 const STATIC_ASSETS = [
   "/",
@@ -10,8 +10,14 @@ self.addEventListener("install", (event) => {
   self.skipWaiting();
 
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
+    caches.open(CACHE_NAME).then(async (cache) => {
+      for (const asset of STATIC_ASSETS) {
+        try {
+          await cache.add(asset);
+        } catch (error) {
+          console.warn("Could not cache asset:", asset, error);
+        }
+      }
     })
   );
 });
@@ -33,34 +39,29 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const { request } = event;
 
-  if (request.method !== "GET") {
-    return;
-  }
+  if (request.method !== "GET") return;
 
   const requestUrl = new URL(request.url);
 
-  if (requestUrl.origin !== self.location.origin) {
-    return;
-  }
+  if (requestUrl.origin !== self.location.origin) return;
 
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(() => {
-        return caches.match("/");
-      })
+      fetch(request).catch(() => caches.match("/"))
     );
-
     return;
   }
 
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
+      if (cachedResponse) return cachedResponse;
 
       return fetch(request)
         .then((networkResponse) => {
+          if (!networkResponse || networkResponse.status !== 200) {
+            return networkResponse;
+          }
+
           const responseClone = networkResponse.clone();
 
           caches.open(CACHE_NAME).then((cache) => {

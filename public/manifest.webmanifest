@@ -1,4 +1,5 @@
 {
+  "id": "/",
   "name": "JobProof",
   "short_name": "JobProof",
   "description": "Create, manage and share professional job completion reports.",
@@ -12,7 +13,7 @@
   "icons": [
     {
       "src": "/icons/jobproof-icon.svg",
-      "sizes": "any",
+      "sizes": "512x512",
       "type": "image/svg+xml",
       "purpose": "any maskable"
     }
