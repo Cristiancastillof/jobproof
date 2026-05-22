@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import InstallAppButton from "../components/InstallAppButton";
 
 const Home = () => {
   return (
@@ -69,12 +70,12 @@ const Home = () => {
               </div>
             </div>
 
-            <div className="home-report-footer">
-              Ready to download as PDF
-            </div>
+            <div className="home-report-footer">Ready to download as PDF</div>
           </div>
         </div>
       </div>
+
+      <InstallAppButton />
 
       <div className="home-benefits-section">
         <div className="home-section-heading">
