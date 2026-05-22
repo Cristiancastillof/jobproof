@@ -6,6 +6,7 @@ import "bootstrap/dist/js/bootstrap.bundle.min.js";
 import "./index.css";
 import App from "./App.jsx";
 import { AuthProvider } from "./context/AuthContext.jsx";
+import { registerServiceWorker } from "./registerServiceWorker";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
@@ -16,3 +17,5 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     </BrowserRouter>
   </React.StrictMode>
 );
+
+registerServiceWorker();
