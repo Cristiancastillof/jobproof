@@ -16,25 +16,28 @@ const PhotoInputButton = ({
   onChange,
 }) => {
   return (
-    <div className="w-100">
-      <label
-        htmlFor={inputId}
-        className={
-          disabled
-            ? `btn btn-${variant} w-100 disabled`
-            : `btn btn-${variant} w-100`
-        }
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        minHeight: "48px",
+      }}
+    >
+      <button
+        type="button"
+        className={`btn btn-${variant} w-100`}
+        disabled={disabled}
         style={{
           minHeight: "48px",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           fontWeight: 800,
-          cursor: disabled ? "not-allowed" : "pointer",
+          pointerEvents: "none",
         }}
       >
         {label}
-      </label>
+      </button>
 
       <input
         id={inputId}
@@ -45,7 +48,13 @@ const PhotoInputButton = ({
         disabled={disabled}
         onChange={onChange}
         style={{
-          display: "none",
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          opacity: 0.001,
+          zIndex: 5,
+          cursor: "pointer",
         }}
       />
     </div>
@@ -74,7 +83,9 @@ const resizeImageFile = (file) => {
     if (file.size > MAX_ORIGINAL_FILE_SIZE_BYTES) {
       reject(
         new Error(
-          `${file.name || "This photo"} is too large. Maximum original size is ${MAX_ORIGINAL_FILE_SIZE_MB} MB.`
+          `${
+            file.name || "This photo"
+          } is too large. Maximum original size is ${MAX_ORIGINAL_FILE_SIZE_MB} MB.`
         )
       );
       return;
