@@ -1,9 +1,11 @@
-const CACHE_NAME = "jobproof-pwa-v2";
+const CACHE_NAME = "jobproof-pwa-v4";
 
 const STATIC_ASSETS = [
   "/",
   "/manifest.webmanifest",
-  "/icons/jobproof-icon.svg"
+  "/icons/jobproof-icon.svg",
+  "/icons/jobproof-icon-192.png",
+  "/icons/jobproof-icon-512.png",
 ];
 
 self.addEventListener("install", (event) => {
@@ -47,30 +49,41 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(() => caches.match("/"))
-    );
-    return;
-  }
-
-  event.respondWith(
-    caches.match(request).then((cachedResponse) => {
-      if (cachedResponse) return cachedResponse;
-
-      return fetch(request)
+      fetch(request)
         .then((networkResponse) => {
-          if (!networkResponse || networkResponse.status !== 200) {
-            return networkResponse;
-          }
-
           const responseClone = networkResponse.clone();
 
           caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseClone);
+            cache.put("/", responseClone);
           });
 
           return networkResponse;
         })
-        .catch(() => caches.match("/"));
-    })
+        .catch(() => caches.match("/"))
+    );
+
+    return;
+  }
+
+  event.respondWith(
+    fetch(request)
+      .then((networkResponse) => {
+        if (!networkResponse || networkResponse.status !== 200) {
+          return networkResponse;
+        }
+
+        const responseClone = networkResponse.clone();
+
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(request, responseClone);
+        });
+
+        return networkResponse;
+      })
+      .catch(() => {
+        return caches.match(request).then((cachedResponse) => {
+          return cachedResponse || caches.match("/");
+        });
+      })
   );
 });

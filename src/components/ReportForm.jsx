@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { calculateTotalHours } from "../utils/calculateTotalHours";
 
 const MAX_PHOTOS_PER_GROUP = 6;
@@ -5,6 +6,43 @@ const MAX_FILE_SIZE_MB = 10;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 const MAX_IMAGE_WIDTH_OR_HEIGHT = 1600;
 const JPEG_QUALITY = 0.75;
+
+const PhotoInputButton = ({
+  inputId,
+  label,
+  variant = "primary",
+  disabled = false,
+  capture,
+  multiple = false,
+  onChange,
+}) => {
+  const inputRef = useRef(null);
+
+  return (
+    <div className="jp-photo-input-wrapper">
+      <button
+        type="button"
+        className={`btn btn-${variant} w-100 jp-photo-input-button`}
+        disabled={disabled}
+        onClick={() => inputRef.current?.click()}
+      >
+        {label}
+      </button>
+
+      <input
+        ref={inputRef}
+        id={inputId}
+        type="file"
+        accept="image/*"
+        capture={capture}
+        multiple={multiple}
+        disabled={disabled}
+        className="jp-photo-real-input"
+        onChange={onChange}
+      />
+    </div>
+  );
+};
 
 const resizeImageFile = (file) => {
   return new Promise((resolve, reject) => {
@@ -391,51 +429,23 @@ const ReportForm = ({
         </div>
 
         <div className="photo-action-grid">
-          <div>
-            <button
-              type="button"
-              className="btn btn-primary w-100"
-              disabled={hasReachedLimit}
-              onClick={() => {
-                document.getElementById(`${inputId}Camera`)?.click();
-              }}
-            >
-              Take photo
-            </button>
+          <PhotoInputButton
+            inputId={`${inputId}Camera`}
+            label="Take photo"
+            variant="primary"
+            disabled={hasReachedLimit}
+            capture="environment"
+            onChange={(event) => handlePhotoUpload(event, photoType)}
+          />
 
-            <input
-              id={`${inputId}Camera`}
-              type="file"
-              className="visually-hidden"
-              accept="image/*"
-              capture="environment"
-              disabled={hasReachedLimit}
-              onChange={(event) => handlePhotoUpload(event, photoType)}
-            />
-          </div>
-
-          <div>
-            <button
-              type="button"
-              className="btn btn-outline-primary w-100"
-              disabled={hasReachedLimit}
-              onClick={() => {
-                document.getElementById(`${inputId}Gallery`)?.click();
-              }}
-            >
-              Upload from gallery
-            </button>
-
-            <input
-              id={`${inputId}Gallery`}
-              type="file"
-              className="visually-hidden"
-              accept="image/*"
-              multiple
-              disabled={hasReachedLimit}
-              onChange={(event) => handlePhotoUpload(event, photoType)}
-            />
-          </div>
+          <PhotoInputButton
+            inputId={`${inputId}Gallery`}
+            label="Upload from gallery"
+            variant="outline-primary"
+            disabled={hasReachedLimit}
+            multiple
+            onChange={(event) => handlePhotoUpload(event, photoType)}
+          />
         </div>
 
         <small className="text-muted d-block mt-2">
@@ -448,16 +458,37 @@ const ReportForm = ({
         ) : (
           <div className="photo-preview-grid mt-3">
             {photos.map((photo, index) => (
-              <div className="photo-preview-card" key={`${photoType}-${index}`}>
+              <div
+                className="photo-preview-card"
+                key={`${photoType}-${index}`}
+                style={{
+                  width: "100%",
+                  overflow: "hidden",
+                  borderRadius: "18px",
+                  background: "#020617",
+                  border: "1px solid rgba(15, 23, 42, 0.1)",
+                }}
+              >
                 <img
                   src={photo}
                   alt={`${title} ${index + 1}`}
                   className="photo-preview-img"
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    height: "260px",
+                    objectFit: "contain",
+                    objectPosition: "center",
+                    background: "#020617",
+                  }}
                 />
 
                 <button
                   type="button"
-                  className="btn btn-sm btn-danger photo-remove-btn"
+                  className="btn btn-sm btn-danger w-100"
+                  style={{
+                    borderRadius: 0,
+                  }}
                   onClick={() => handleRemovePhoto(photoType, index)}
                 >
                   Remove
