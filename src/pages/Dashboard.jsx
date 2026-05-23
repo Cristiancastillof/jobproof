@@ -25,27 +25,27 @@ const createInitialStats = () => ({
 const getRoleCopy = (role) => {
   if (role === "admin") {
     return {
-      label: "Admin dashboard",
-      title: "Company command center",
+      label: "Admin command center",
+      title: "Operations Command Center",
       subtitle:
-        "Monitor reports, team activity, workflow status and operational documentation from one professional workspace.",
+        "Control reports, team activity, client work and job documentation from one central workspace.",
     };
   }
 
   if (role === "supervisor") {
     return {
-      label: "Supervisor dashboard",
-      title: "Operational overview",
+      label: "Supervisor command center",
+      title: "Field Operations Overview",
       subtitle:
-        "Review active jobs, monitor report status and keep field operations moving with clear documentation.",
+        "Review active jobs, monitor report status and keep operational workflow moving.",
     };
   }
 
   return {
-    label: "Worker dashboard",
-    title: "My field workspace",
+    label: "Worker workspace",
+    title: "My Field Workspace",
     subtitle:
-      "Create job reports, capture photos, review your submitted work and access jobs assigned to you.",
+      "Create job reports, capture proof, review your work and access assigned jobs.",
   };
 };
 
@@ -56,20 +56,17 @@ const getRoleLabel = (role) => {
   return "User";
 };
 
-const getStatusBadgeClass = (status) => {
-  if (status === "completed") return "jp-dash-status completed";
-  if (status === "checked") return "jp-dash-status checked";
-  if (status === "pending") return "jp-dash-status pending";
-
-  return "jp-dash-status pending";
-};
-
 const getStatusLabel = (status) => {
   if (status === "completed") return "Completed";
   if (status === "checked") return "Checked";
   if (status === "pending") return "Pending";
-
   return "Pending";
+};
+
+const getStatusClass = (status) => {
+  if (status === "completed") return "completed";
+  if (status === "checked") return "checked";
+  return "pending";
 };
 
 const getInitials = (value) => {
@@ -84,34 +81,33 @@ const getInitials = (value) => {
   return String(value).slice(0, 2).toUpperCase();
 };
 
-const StatCard = ({ label, value, helper, variant = "default" }) => {
-  return (
-    <div className={`jp-dash-stat-card ${variant}`}>
-      <div>
-        <span>{label}</span>
-        <strong>{value}</strong>
-      </div>
+const StatCard = ({ label, value, helper, variant = "default", onClick }) => {
+  const Component = onClick ? "button" : "div";
 
+  return (
+    <Component
+      type={onClick ? "button" : undefined}
+      className={`jp-command-stat ${variant}`}
+      onClick={onClick}
+    >
+      <span>{label}</span>
+      <strong>{value}</strong>
       {helper && <small>{helper}</small>}
-    </div>
+    </Component>
   );
 };
 
-const QuickAction = ({ to, title, description, buttonLabel, tone = "blue" }) => {
+const QuickAction = ({ to, title, description, label, tone = "blue" }) => {
   return (
-    <Link to={to} className={`jp-dash-action-card ${tone}`}>
-      <div>
-        <span className="jp-dash-action-icon">
-          {title.charAt(0).toUpperCase()}
-        </span>
+    <Link to={to} className={`jp-command-action ${tone}`}>
+      <span>{title.charAt(0).toUpperCase()}</span>
 
-        <div>
-          <h3>{title}</h3>
-          <p>{description}</p>
-        </div>
+      <div>
+        <strong>{title}</strong>
+        <small>{description}</small>
       </div>
 
-      <strong>{buttonLabel}</strong>
+      <em>{label}</em>
     </Link>
   );
 };
@@ -120,14 +116,16 @@ const Dashboard = () => {
   const { user, profile, displayName, displayRole, profileLoading } = useAuth();
 
   const [stats, setStats] = useState(createInitialStats);
-  const [recentReports, setRecentReports] = useState([]);
+  const [reports, setReports] = useState([]);
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [message, setMessage] = useState(null);
+  const [activeFilter, setActiveFilter] = useState("all");
 
   const role = profile?.role || "worker";
   const isAdmin = role === "admin";
   const isSupervisor = role === "supervisor";
   const isWorker = role === "worker";
+  const canManageWorkspace = isAdmin || isSupervisor;
 
   const roleCopy = useMemo(() => getRoleCopy(role), [role]);
 
@@ -135,6 +133,68 @@ const Dashboard = () => {
     if (!stats.totalReports) return 0;
     return Math.round((stats.completedReports / stats.totalReports) * 100);
   }, [stats.totalReports, stats.completedReports]);
+
+  const filteredReports = useMemo(() => {
+    if (activeFilter === "all") return reports.slice(0, 8);
+
+    return reports
+      .filter((report) => (report.status || "pending") === activeFilter)
+      .slice(0, 8);
+  }, [reports, activeFilter]);
+
+  const needsAttention = useMemo(() => {
+    const items = [];
+
+    if (stats.pendingReports > 0) {
+      items.push({
+        title: `${stats.pendingReports} pending report${
+          stats.pendingReports === 1 ? "" : "s"
+        }`,
+        description: "Waiting for review or further action.",
+        tone: "amber",
+        filter: "pending",
+      });
+    }
+
+    if (stats.checkedReports > 0 && canManageWorkspace) {
+      items.push({
+        title: `${stats.checkedReports} checked report${
+          stats.checkedReports === 1 ? "" : "s"
+        }`,
+        description: "Reviewed and ready to be completed.",
+        tone: "blue",
+        filter: "checked",
+      });
+    }
+
+    if (stats.pendingInvitations > 0 && isAdmin) {
+      items.push({
+        title: `${stats.pendingInvitations} pending invitation${
+          stats.pendingInvitations === 1 ? "" : "s"
+        }`,
+        description: "Team invites waiting for acceptance.",
+        tone: "slate",
+        to: "/team",
+      });
+    }
+
+    if (items.length === 0) {
+      items.push({
+        title: "No urgent actions",
+        description: "Your workspace is currently under control.",
+        tone: "green",
+        filter: "all",
+      });
+    }
+
+    return items;
+  }, [
+    stats.pendingReports,
+    stats.checkedReports,
+    stats.pendingInvitations,
+    canManageWorkspace,
+    isAdmin,
+  ]);
 
   const formatDate = (dateValue) => {
     if (!dateValue) return "Not provided";
@@ -165,6 +225,17 @@ const Dashboard = () => {
         (report) => (report.status || "pending") === "completed"
       ).length,
     };
+  };
+
+  const canEditReport = (report) => {
+    if (!report) return false;
+    if (isAdmin || isSupervisor) return true;
+
+    return (
+      isWorker &&
+      report.created_by === user?.id &&
+      (report.status || "pending") !== "completed"
+    );
   };
 
   useEffect(() => {
@@ -285,7 +356,7 @@ const Dashboard = () => {
           participatedReports,
         });
 
-        setRecentReports(visibleReports.slice(0, 5));
+        setReports(visibleReports);
       } catch (error) {
         console.error("Error loading dashboard:", error);
 
@@ -308,7 +379,7 @@ const Dashboard = () => {
           <span className="visually-hidden">Loading...</span>
         </div>
 
-        <h1 className="h5">Loading dashboard</h1>
+        <h1 className="h5">Loading command center</h1>
 
         <p className="text-muted mb-0">
           Please wait while JobProof prepares your workspace.
@@ -344,65 +415,53 @@ const Dashboard = () => {
     <>
       <style>
         {`
-          .jp-dash-page {
+          .jp-command-page {
             display: grid;
-            gap: 24px;
+            gap: 22px;
           }
 
-          .jp-dash-hero {
+          .jp-command-hero {
             position: relative;
             overflow: hidden;
             display: grid;
-            grid-template-columns: 1.5fr 0.8fr;
+            grid-template-columns: 1.35fr 0.65fr;
             gap: 22px;
             padding: 28px;
-            border-radius: 32px;
+            border-radius: 34px;
             color: #ffffff;
             background:
-              radial-gradient(circle at top right, rgba(245, 158, 11, 0.35), transparent 32%),
-              linear-gradient(135deg, #0f172a, #1e40af);
-            box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
+              radial-gradient(circle at top right, rgba(245, 158, 11, 0.36), transparent 30%),
+              radial-gradient(circle at bottom left, rgba(59, 130, 246, 0.35), transparent 30%),
+              linear-gradient(135deg, #020617, #1e40af);
+            box-shadow: 0 26px 74px rgba(15, 23, 42, 0.24);
           }
 
-          .jp-dash-hero::after {
-            content: "";
-            position: absolute;
-            right: -90px;
-            bottom: -120px;
-            width: 280px;
-            height: 280px;
-            border-radius: 999px;
-            background: rgba(255, 255, 255, 0.08);
-          }
-
-          .jp-dash-hero-content {
+          .jp-command-hero-main {
             position: relative;
             z-index: 1;
           }
 
-          .jp-dash-eyebrow {
+          .jp-command-eyebrow {
             display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 12px;
+            margin-bottom: 14px;
             color: #bfdbfe;
-            font-size: 0.78rem;
+            font-size: 0.76rem;
             font-weight: 950;
             text-transform: uppercase;
-            letter-spacing: 0.12em;
+            letter-spacing: 0.13em;
           }
 
-          .jp-dash-hero h1 {
+          .jp-command-hero h1 {
+            max-width: 760px;
             margin: 0;
-            max-width: 720px;
-            font-size: clamp(2rem, 5vw, 3.4rem);
-            line-height: 0.95;
+            font-size: clamp(2.1rem, 5vw, 3.8rem);
+            line-height: 0.93;
             font-weight: 950;
-            letter-spacing: -0.06em;
+            letter-spacing: -0.07em;
           }
 
-          .jp-dash-hero p {
-            max-width: 660px;
+          .jp-command-hero p {
+            max-width: 670px;
             margin: 16px 0 0;
             color: #dbeafe;
             font-size: 1rem;
@@ -410,71 +469,54 @@ const Dashboard = () => {
             font-weight: 650;
           }
 
-          .jp-dash-hero-actions {
+          .jp-command-hero-actions {
             display: flex;
             flex-wrap: wrap;
             gap: 12px;
             margin-top: 22px;
           }
 
-          .jp-dash-hero-actions .btn {
+          .jp-command-hero-actions .btn {
             min-height: 44px;
             border-radius: 999px;
             font-weight: 900;
           }
 
-          .jp-dash-profile-card {
+          .jp-command-profile {
             position: relative;
             z-index: 1;
             align-self: stretch;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            gap: 22px;
+            display: grid;
+            gap: 18px;
             padding: 20px;
-            border-radius: 26px;
+            border-radius: 28px;
             background: rgba(255, 255, 255, 0.12);
             border: 1px solid rgba(255, 255, 255, 0.2);
             backdrop-filter: blur(18px);
           }
 
-          .jp-dash-profile-top {
+          .jp-command-profile-top {
             display: flex;
             align-items: center;
             gap: 12px;
             min-width: 0;
           }
 
-          .jp-dash-avatar {
-            width: 52px;
-            height: 52px;
-            flex: 0 0 52px;
+          .jp-command-avatar {
+            width: 54px;
+            height: 54px;
+            flex: 0 0 54px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            border-radius: 18px;
+            border-radius: 20px;
             color: #0f172a;
             background: #ffffff;
-            font-size: 1rem;
             font-weight: 950;
           }
 
-          .jp-dash-profile-meta {
-            min-width: 0;
-          }
-
-          .jp-dash-profile-meta span {
+          .jp-command-profile strong {
             display: block;
-            color: #bfdbfe;
-            font-size: 0.74rem;
-            font-weight: 900;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-          }
-
-          .jp-dash-profile-meta strong {
-            display: block;
-            margin-top: 3px;
             color: #ffffff;
             font-size: 1rem;
             font-weight: 950;
@@ -483,9 +525,10 @@ const Dashboard = () => {
             text-overflow: ellipsis;
           }
 
-          .jp-dash-profile-meta small {
+          .jp-command-profile span {
             display: inline-flex;
-            margin-top: 8px;
+            width: fit-content;
+            margin-top: 7px;
             padding: 5px 9px;
             border-radius: 999px;
             color: #ffffff;
@@ -496,100 +539,39 @@ const Dashboard = () => {
             letter-spacing: 0.08em;
           }
 
-          .jp-dash-progress {
+          .jp-command-progress {
             display: grid;
             gap: 8px;
           }
 
-          .jp-dash-progress-label {
+          .jp-command-progress-label {
             display: flex;
             justify-content: space-between;
-            gap: 12px;
             color: #dbeafe;
-            font-size: 0.8rem;
+            font-size: 0.82rem;
             font-weight: 850;
           }
 
-          .jp-dash-progress-track {
+          .jp-command-progress-track {
             overflow: hidden;
             height: 10px;
             border-radius: 999px;
             background: rgba(255, 255, 255, 0.18);
           }
 
-          .jp-dash-progress-fill {
+          .jp-command-progress-fill {
             height: 100%;
             border-radius: inherit;
             background: #f59e0b;
           }
 
-          .jp-dash-stat-grid {
+          .jp-command-board {
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 16px;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px;
           }
 
-          .jp-dash-stat-card {
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            min-height: 132px;
-            padding: 20px;
-            border-radius: 24px;
-            background: #ffffff;
-            border: 1px solid rgba(15, 23, 42, 0.08);
-            box-shadow: 0 16px 40px rgba(15, 23, 42, 0.07);
-          }
-
-          .jp-dash-stat-card span {
-            color: #64748b;
-            font-size: 0.78rem;
-            font-weight: 900;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-          }
-
-          .jp-dash-stat-card strong {
-            display: block;
-            margin-top: 10px;
-            color: #0f172a;
-            font-size: 2.25rem;
-            line-height: 1;
-            font-weight: 950;
-            letter-spacing: -0.06em;
-          }
-
-          .jp-dash-stat-card small {
-            margin-top: 14px;
-            color: #64748b;
-            font-size: 0.84rem;
-            font-weight: 650;
-            line-height: 1.4;
-          }
-
-          .jp-dash-stat-card.pending {
-            border-color: rgba(245, 158, 11, 0.25);
-            background: linear-gradient(180deg, #ffffff, #fffbeb);
-          }
-
-          .jp-dash-stat-card.checked {
-            border-color: rgba(30, 64, 175, 0.18);
-            background: linear-gradient(180deg, #ffffff, #eff6ff);
-          }
-
-          .jp-dash-stat-card.completed {
-            border-color: rgba(22, 101, 52, 0.18);
-            background: linear-gradient(180deg, #ffffff, #f0fdf4);
-          }
-
-          .jp-dash-main-grid {
-            display: grid;
-            grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.65fr);
-            gap: 20px;
-            align-items: start;
-          }
-
-          .jp-dash-panel {
+          .jp-command-card {
             padding: 22px;
             border-radius: 28px;
             background: #ffffff;
@@ -597,96 +579,235 @@ const Dashboard = () => {
             box-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
           }
 
-          .jp-dash-panel-header {
+          .jp-command-card-header {
             display: flex;
-            align-items: flex-start;
             justify-content: space-between;
-            gap: 16px;
-            margin-bottom: 18px;
+            align-items: flex-start;
+            gap: 14px;
+            margin-bottom: 16px;
           }
 
-          .jp-dash-panel-header h2 {
+          .jp-command-card-header h2 {
             margin: 0;
             color: #0f172a;
-            font-size: 1.3rem;
+            font-size: 1.25rem;
             font-weight: 950;
             letter-spacing: -0.04em;
           }
 
-          .jp-dash-panel-header p {
+          .jp-command-card-header p {
             margin: 5px 0 0;
             color: #64748b;
+            font-size: 0.9rem;
             font-weight: 650;
           }
 
-          .jp-dash-recent-list {
+          .jp-command-attention-list {
             display: grid;
             gap: 10px;
           }
 
-          .jp-dash-recent-item {
-            display: grid;
-            grid-template-columns: 1fr auto;
-            gap: 14px;
+          .jp-command-attention {
+            width: 100%;
+            text-align: left;
+            display: flex;
+            justify-content: space-between;
             align-items: center;
+            gap: 12px;
             padding: 14px;
             border-radius: 18px;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            background: #f8fafc;
             color: #0f172a;
             text-decoration: none;
-            background: #f8fafc;
-            border: 1px solid rgba(15, 23, 42, 0.07);
-            transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+            cursor: pointer;
           }
 
-          .jp-dash-recent-item:hover {
-            color: #0f172a;
+          .jp-command-attention strong {
+            display: block;
+            font-weight: 950;
+          }
+
+          .jp-command-attention small {
+            display: block;
+            margin-top: 3px;
+            color: #64748b;
+            font-weight: 650;
+          }
+
+          .jp-command-attention::after {
+            content: "Open";
+            flex: 0 0 auto;
+            color: #1e40af;
+            font-size: 0.78rem;
+            font-weight: 950;
+          }
+
+          .jp-command-attention.amber {
+            background: #fffbeb;
+            border-color: rgba(245, 158, 11, 0.22);
+          }
+
+          .jp-command-attention.blue {
             background: #eff6ff;
             border-color: rgba(30, 64, 175, 0.18);
-            transform: translateY(-1px);
           }
 
-          .jp-dash-recent-main {
+          .jp-command-attention.green {
+            background: #f0fdf4;
+            border-color: rgba(22, 101, 52, 0.18);
+          }
+
+          .jp-command-pipeline {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+          }
+
+          .jp-command-stat {
+            appearance: none;
+            width: 100%;
+            text-align: left;
+            min-height: 132px;
+            padding: 18px;
+            border-radius: 22px;
+            background: #ffffff;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            box-shadow: 0 14px 38px rgba(15, 23, 42, 0.06);
+          }
+
+          .jp-command-stat span {
+            color: #64748b;
+            font-size: 0.76rem;
+            font-weight: 950;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+          }
+
+          .jp-command-stat strong {
+            display: block;
+            margin-top: 10px;
+            color: #0f172a;
+            font-size: 2.15rem;
+            line-height: 1;
+            font-weight: 950;
+            letter-spacing: -0.06em;
+          }
+
+          .jp-command-stat small {
+            display: block;
+            margin-top: 12px;
+            color: #64748b;
+            font-size: 0.82rem;
+            font-weight: 650;
+            line-height: 1.35;
+          }
+
+          .jp-command-stat.pending {
+            background: linear-gradient(180deg, #ffffff, #fffbeb);
+            border-color: rgba(245, 158, 11, 0.25);
+          }
+
+          .jp-command-stat.checked {
+            background: linear-gradient(180deg, #ffffff, #eff6ff);
+            border-color: rgba(30, 64, 175, 0.18);
+          }
+
+          .jp-command-stat.completed {
+            background: linear-gradient(180deg, #ffffff, #f0fdf4);
+            border-color: rgba(22, 101, 52, 0.18);
+          }
+
+          .jp-command-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.7fr);
+            gap: 20px;
+            align-items: start;
+          }
+
+          .jp-command-filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+          }
+
+          .jp-command-filter {
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            border-radius: 999px;
+            padding: 8px 12px;
+            color: #475569;
+            background: #ffffff;
+            font-size: 0.84rem;
+            font-weight: 900;
+          }
+
+          .jp-command-filter.active {
+            color: #1e40af;
+            background: #eff6ff;
+            border-color: rgba(30, 64, 175, 0.22);
+          }
+
+          .jp-command-report-list {
+            display: grid;
+            gap: 12px;
+          }
+
+          .jp-command-report {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 14px;
+            padding: 16px;
+            border-radius: 20px;
+            background: #f8fafc;
+            border: 1px solid rgba(15, 23, 42, 0.07);
+          }
+
+          .jp-command-report-main {
             min-width: 0;
           }
 
-          .jp-dash-recent-main strong {
+          .jp-command-report-main strong {
             display: block;
-            font-size: 0.95rem;
+            color: #0f172a;
+            font-size: 0.98rem;
             font-weight: 950;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
           }
 
-          .jp-dash-recent-main span {
+          .jp-command-report-main span {
             display: block;
             margin-top: 4px;
             color: #64748b;
-            font-size: 0.84rem;
+            font-size: 0.86rem;
             font-weight: 750;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
           }
 
-          .jp-dash-recent-meta {
+          .jp-command-report-main small {
+            display: block;
+            margin-top: 7px;
+            color: #64748b;
+            font-size: 0.78rem;
+            font-weight: 650;
+          }
+
+          .jp-command-report-actions {
             display: flex;
             flex-direction: column;
             align-items: flex-end;
-            gap: 7px;
+            gap: 8px;
           }
 
-          .jp-dash-recent-meta small {
-            color: #64748b;
-            font-size: 0.78rem;
-            font-weight: 750;
-          }
-
-          .jp-dash-status {
+          .jp-command-status {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            min-width: 82px;
+            min-width: 88px;
             padding: 6px 9px;
             border-radius: 999px;
             font-size: 0.7rem;
@@ -695,34 +816,44 @@ const Dashboard = () => {
             letter-spacing: 0.06em;
           }
 
-          .jp-dash-status.pending {
+          .jp-command-status.pending {
             color: #92400e;
             background: #fffbeb;
             border: 1px solid rgba(245, 158, 11, 0.22);
           }
 
-          .jp-dash-status.checked {
+          .jp-command-status.checked {
             color: #1e40af;
             background: #eff6ff;
             border: 1px solid rgba(30, 64, 175, 0.18);
           }
 
-          .jp-dash-status.completed {
+          .jp-command-status.completed {
             color: #166534;
             background: #f0fdf4;
             border: 1px solid rgba(22, 101, 52, 0.18);
           }
 
-          .jp-dash-actions {
+          .jp-command-report-buttons {
+            display: flex;
+            gap: 8px;
+          }
+
+          .jp-command-report-buttons .btn {
+            border-radius: 999px;
+            font-weight: 850;
+          }
+
+          .jp-command-actions {
             display: grid;
             gap: 12px;
           }
 
-          .jp-dash-action-card {
-            display: flex;
-            justify-content: space-between;
+          .jp-command-action {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
             align-items: center;
-            gap: 14px;
+            gap: 12px;
             padding: 16px;
             border-radius: 22px;
             color: #0f172a;
@@ -730,195 +861,160 @@ const Dashboard = () => {
             background: #ffffff;
             border: 1px solid rgba(15, 23, 42, 0.08);
             box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
-            transition: transform 0.18s ease, border-color 0.18s ease;
           }
 
-          .jp-dash-action-card:hover {
+          .jp-command-action:hover {
             color: #0f172a;
-            transform: translateY(-1px);
             border-color: rgba(30, 64, 175, 0.22);
           }
 
-          .jp-dash-action-card > div {
-            display: flex;
-            align-items: flex-start;
-            gap: 12px;
-            min-width: 0;
-          }
-
-          .jp-dash-action-icon {
-            width: 38px;
-            height: 38px;
-            flex: 0 0 38px;
+          .jp-command-action > span {
+            width: 40px;
+            height: 40px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            border-radius: 14px;
+            border-radius: 15px;
             color: #ffffff;
             background: #1e40af;
-            font-size: 0.9rem;
             font-weight: 950;
           }
 
-          .jp-dash-action-card.amber .jp-dash-action-icon {
-            background: #f59e0b;
-          }
-
-          .jp-dash-action-card.green .jp-dash-action-icon {
+          .jp-command-action.green > span {
             background: #166534;
           }
 
-          .jp-dash-action-card.dark .jp-dash-action-icon {
+          .jp-command-action.amber > span {
+            background: #f59e0b;
+          }
+
+          .jp-command-action.dark > span {
             background: #0f172a;
           }
 
-          .jp-dash-action-card h3 {
-            margin: 0;
-            font-size: 0.98rem;
+          .jp-command-action strong {
+            display: block;
+            font-size: 0.95rem;
             font-weight: 950;
-            letter-spacing: -0.03em;
           }
 
-          .jp-dash-action-card p {
-            margin: 4px 0 0;
+          .jp-command-action small {
+            display: block;
+            margin-top: 3px;
             color: #64748b;
-            font-size: 0.82rem;
+            font-size: 0.8rem;
             font-weight: 650;
-            line-height: 1.4;
+            line-height: 1.35;
           }
 
-          .jp-dash-action-card > strong {
-            flex: 0 0 auto;
+          .jp-command-action em {
             color: #1e40af;
-            font-size: 0.82rem;
+            font-style: normal;
+            font-size: 0.8rem;
             font-weight: 950;
           }
 
-          .jp-dash-empty {
-            display: grid;
-            place-items: center;
-            min-height: 220px;
+          .jp-command-empty {
             padding: 28px;
             border-radius: 22px;
+            text-align: center;
             background: #f8fafc;
             border: 1px dashed rgba(15, 23, 42, 0.16);
-            text-align: center;
           }
 
-          .jp-dash-empty h3 {
+          .jp-command-empty h3 {
             color: #0f172a;
             font-weight: 950;
           }
 
-          .jp-dash-empty p {
+          .jp-command-empty p {
             color: #64748b;
             font-weight: 650;
           }
 
           @media (max-width: 991px) {
-            .jp-dash-hero {
+            .jp-command-hero,
+            .jp-command-board,
+            .jp-command-layout {
               grid-template-columns: 1fr;
-              padding: 24px;
-              border-radius: 28px;
             }
 
-            .jp-dash-profile-card {
-              gap: 16px;
-            }
-
-            .jp-dash-stat-grid {
-              grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-
-            .jp-dash-main-grid {
+            .jp-command-pipeline {
               grid-template-columns: 1fr;
             }
           }
 
           @media (max-width: 576px) {
-            .jp-dash-page {
+            .jp-command-page {
               gap: 18px;
             }
 
-            .jp-dash-hero {
+            .jp-command-hero {
               padding: 22px;
-              border-radius: 24px;
+              border-radius: 26px;
             }
 
-            .jp-dash-hero h1 {
-              font-size: 2.15rem;
+            .jp-command-hero h1 {
+              font-size: 2.2rem;
             }
 
-            .jp-dash-hero p {
-              font-size: 0.94rem;
-            }
-
-            .jp-dash-hero-actions {
+            .jp-command-hero-actions {
               display: grid;
               grid-template-columns: 1fr;
             }
 
-            .jp-dash-hero-actions .btn {
+            .jp-command-hero-actions .btn {
               width: 100%;
             }
 
-            .jp-dash-stat-grid {
-              grid-template-columns: 1fr;
-              gap: 12px;
-            }
-
-            .jp-dash-stat-card {
-              min-height: 118px;
-              padding: 18px;
-            }
-
-            .jp-dash-stat-card strong {
-              font-size: 2rem;
-            }
-
-            .jp-dash-panel {
+            .jp-command-card {
               padding: 18px;
               border-radius: 24px;
             }
 
-            .jp-dash-panel-header {
+            .jp-command-card-header {
               flex-direction: column;
             }
 
-            .jp-dash-panel-header .btn {
-              width: 100%;
-            }
-
-            .jp-dash-recent-item {
+            .jp-command-report {
               grid-template-columns: 1fr;
             }
 
-            .jp-dash-recent-meta {
+            .jp-command-report-actions {
               align-items: flex-start;
-              flex-direction: row;
-              justify-content: space-between;
             }
 
-            .jp-dash-action-card {
-              align-items: flex-start;
-              flex-direction: column;
+            .jp-command-report-buttons {
+              width: 100%;
+            }
+
+            .jp-command-report-buttons .btn {
+              flex: 1;
+            }
+
+            .jp-command-action {
+              grid-template-columns: auto 1fr;
+            }
+
+            .jp-command-action em {
+              grid-column: 1 / -1;
             }
           }
         `}
       </style>
 
-      <section className="jp-dash-page">
+      <section className="jp-command-page">
         <InstallAppButton />
 
-        <div className="jp-dash-hero">
-          <div className="jp-dash-hero-content">
-            <span className="jp-dash-eyebrow">{roleCopy.label}</span>
+        <div className="jp-command-hero">
+          <div className="jp-command-hero-main">
+            <span className="jp-command-eyebrow">{roleCopy.label}</span>
 
             <h1>{roleCopy.title}</h1>
 
             <p>{roleCopy.subtitle}</p>
 
-            <div className="jp-dash-hero-actions">
+            <div className="jp-command-hero-actions">
               <Link to="/create-report" className="btn btn-light">
                 Create Report
               </Link>
@@ -926,29 +1022,34 @@ const Dashboard = () => {
               <Link to="/reports" className="btn btn-outline-light">
                 View Reports
               </Link>
+
+              {canManageWorkspace && (
+                <Link to="/clients" className="btn btn-outline-light">
+                  Manage Clients
+                </Link>
+              )}
             </div>
           </div>
 
-          <aside className="jp-dash-profile-card">
-            <div className="jp-dash-profile-top">
-              <div className="jp-dash-avatar">{getInitials(displayName)}</div>
+          <aside className="jp-command-profile">
+            <div className="jp-command-profile-top">
+              <div className="jp-command-avatar">{getInitials(displayName)}</div>
 
-              <div className="jp-dash-profile-meta">
-                <span>Signed in as</span>
+              <div>
                 <strong>{displayName || "JobProof user"}</strong>
-                <small>{displayRole || getRoleLabel(role)}</small>
+                <span>{displayRole || getRoleLabel(role)}</span>
               </div>
             </div>
 
-            <div className="jp-dash-progress">
-              <div className="jp-dash-progress-label">
+            <div className="jp-command-progress">
+              <div className="jp-command-progress-label">
                 <span>Completion rate</span>
                 <strong>{completionRate}%</strong>
               </div>
 
-              <div className="jp-dash-progress-track">
+              <div className="jp-command-progress-track">
                 <div
-                  className="jp-dash-progress-fill"
+                  className="jp-command-progress-fill"
                   style={{ width: `${completionRate}%` }}
                 />
               </div>
@@ -962,7 +1063,82 @@ const Dashboard = () => {
           </div>
         )}
 
-        <div className="jp-dash-stat-grid">
+        <div className="jp-command-board">
+          <div className="jp-command-card">
+            <div className="jp-command-card-header">
+              <div>
+                <h2>Needs attention</h2>
+                <p>Priority items that may need action today.</p>
+              </div>
+            </div>
+
+            <div className="jp-command-attention-list">
+              {needsAttention.map((item) =>
+                item.to ? (
+                  <Link
+                    to={item.to}
+                    className={`jp-command-attention ${item.tone}`}
+                    key={item.title}
+                  >
+                    <div>
+                      <strong>{item.title}</strong>
+                      <small>{item.description}</small>
+                    </div>
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    className={`jp-command-attention ${item.tone}`}
+                    key={item.title}
+                    onClick={() => setActiveFilter(item.filter || "all")}
+                  >
+                    <div>
+                      <strong>{item.title}</strong>
+                      <small>{item.description}</small>
+                    </div>
+                  </button>
+                )
+              )}
+            </div>
+          </div>
+
+          <div className="jp-command-card">
+            <div className="jp-command-card-header">
+              <div>
+                <h2>Workflow pipeline</h2>
+                <p>Click a stage to filter the operations board.</p>
+              </div>
+            </div>
+
+            <div className="jp-command-pipeline">
+              <StatCard
+                label="Pending"
+                value={stats.pendingReports}
+                helper="Waiting for review"
+                variant="pending"
+                onClick={() => setActiveFilter("pending")}
+              />
+
+              <StatCard
+                label="Checked"
+                value={stats.checkedReports}
+                helper="Ready to close"
+                variant="checked"
+                onClick={() => setActiveFilter("checked")}
+              />
+
+              <StatCard
+                label="Completed"
+                value={stats.completedReports}
+                helper="Closed jobs"
+                variant="completed"
+                onClick={() => setActiveFilter("completed")}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="jp-command-board">
           <StatCard
             label={isWorker ? "Visible reports" : "Total reports"}
             value={stats.totalReports}
@@ -974,112 +1150,86 @@ const Dashboard = () => {
           />
 
           <StatCard
-            label="Pending"
-            value={stats.pendingReports}
-            helper="Waiting for review or completion"
-            variant="pending"
+            label="Reports this month"
+            value={stats.reportsThisMonth}
+            helper="Current month activity"
           />
 
-          <StatCard
-            label="Checked"
-            value={stats.checkedReports}
-            helper="Reviewed and ready to close"
-            variant="checked"
-          />
+          {canManageWorkspace ? (
+            <>
+              <StatCard
+                label="Active team"
+                value={stats.activeTeamMembers}
+                helper="Active workspace users"
+              />
 
-          <StatCard
-            label="Completed"
-            value={stats.completedReports}
-            helper="Finished and closed"
-            variant="completed"
-          />
+              <StatCard
+                label="Active workers"
+                value={stats.activeWorkers}
+                helper="Current field users"
+              />
+            </>
+          ) : (
+            <>
+              <StatCard
+                label="Created by me"
+                value={stats.createdByMe}
+                helper="Reports you created"
+              />
+
+              <StatCard
+                label="Participated jobs"
+                value={stats.participatedReports}
+                helper="Jobs where you were included"
+              />
+            </>
+          )}
         </div>
 
-        {(isAdmin || isSupervisor) && (
-          <div className="jp-dash-stat-grid">
-            <StatCard
-              label="Reports this month"
-              value={stats.reportsThisMonth}
-              helper="Current month activity"
-            />
-
-            <StatCard
-              label="Active team"
-              value={stats.activeTeamMembers}
-              helper="Active users in workspace"
-            />
-
-            <StatCard
-              label="Active workers"
-              value={stats.activeWorkers}
-              helper="Current field users"
-            />
-
-            {isAdmin ? (
-              <StatCard
-                label="Pending invites"
-                value={stats.pendingInvitations}
-                helper="Invitations waiting to be accepted"
-              />
-            ) : (
-              <StatCard
-                label="Completion rate"
-                value={`${completionRate}%`}
-                helper="Completed versus total reports"
-              />
-            )}
-          </div>
-        )}
-
-        {isWorker && (
-          <div className="jp-dash-stat-grid">
-            <StatCard
-              label="Created by me"
-              value={stats.createdByMe}
-              helper="Reports you created"
-            />
-
-            <StatCard
-              label="Participated jobs"
-              value={stats.participatedReports}
-              helper="Jobs where you were included"
-            />
-          </div>
-        )}
-
-        <div className="jp-dash-main-grid">
-          <div className="jp-dash-panel">
-            <div className="jp-dash-panel-header">
+        <div className="jp-command-layout">
+          <div className="jp-command-card">
+            <div className="jp-command-card-header">
               <div>
-                <h2>Recent reports</h2>
-                <p>Latest report activity in your workspace.</p>
+                <h2>Operations board</h2>
+                <p>Filter, review and open reports directly from here.</p>
               </div>
 
               <Link to="/reports" className="btn btn-outline-primary btn-sm">
-                View all
+                Full reports page
               </Link>
             </div>
 
-            {recentReports.length === 0 ? (
-              <div className="jp-dash-empty">
-                <div>
-                  <h3>No reports yet</h3>
-                  <p>Create your first report and it will appear here.</p>
+            <div className="jp-command-filters">
+              {["all", "pending", "checked", "completed"].map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  className={
+                    activeFilter === filter
+                      ? "jp-command-filter active"
+                      : "jp-command-filter"
+                  }
+                  onClick={() => setActiveFilter(filter)}
+                >
+                  {filter === "all" ? "All" : getStatusLabel(filter)}
+                </button>
+              ))}
+            </div>
 
-                  <Link to="/create-report" className="btn btn-primary">
-                    Create first report
-                  </Link>
-                </div>
+            {filteredReports.length === 0 ? (
+              <div className="jp-command-empty">
+                <h3>No reports found</h3>
+                <p>No reports match the selected filter.</p>
+
+                <Link to="/create-report" className="btn btn-primary">
+                  Create Report
+                </Link>
               </div>
             ) : (
-              <div className="jp-dash-recent-list">
-                {recentReports.map((report) => (
-                  <Link
-                    to={`/reports/${report.id}`}
-                    className="jp-dash-recent-item"
-                    key={report.id}
-                  >
-                    <div className="jp-dash-recent-main">
+              <div className="jp-command-report-list">
+                {filteredReports.map((report) => (
+                  <article className="jp-command-report" key={report.id}>
+                    <div className="jp-command-report-main">
                       <strong>{report.report_number || "No number"}</strong>
 
                       <span>
@@ -1087,44 +1237,69 @@ const Dashboard = () => {
                           report.client_name ||
                           "Client not provided"}
                       </span>
+
+                      <small>
+                        {report.service_type || "No service"} ·{" "}
+                        {formatDate(report.job_date)}
+                      </small>
                     </div>
 
-                    <div className="jp-dash-recent-meta">
-                      <small>{formatDate(report.job_date)}</small>
-
-                      <span className={getStatusBadgeClass(report.status)}>
+                    <div className="jp-command-report-actions">
+                      <span
+                        className={`jp-command-status ${getStatusClass(
+                          report.status
+                        )}`}
+                      >
                         {getStatusLabel(report.status)}
                       </span>
+
+                      <div className="jp-command-report-buttons">
+                        <Link
+                          to={`/reports/${report.id}`}
+                          className="btn btn-sm btn-outline-primary"
+                        >
+                          View
+                        </Link>
+
+                        {canEditReport(report) && (
+                          <Link
+                            to={`/edit-report/${report.id}`}
+                            className="btn btn-sm btn-primary"
+                          >
+                            Edit
+                          </Link>
+                        )}
+                      </div>
                     </div>
-                  </Link>
+                  </article>
                 ))}
               </div>
             )}
           </div>
 
-          <aside className="jp-dash-actions">
+          <aside className="jp-command-actions">
             <QuickAction
               to="/create-report"
               title="Create Report"
-              description="Start a new job report with notes, photos, team and workflow status."
-              buttonLabel="Create"
+              description="Capture notes, photos, team members and job status."
+              label="Create"
               tone="blue"
             />
 
             <QuickAction
               to="/reports"
               title="Reports"
-              description="Open reports, review status, download PDFs and manage job records."
-              buttonLabel="Open"
+              description="Open, review and export professional reports."
+              label="Open"
               tone="dark"
             />
 
-            {(isAdmin || isSupervisor) && (
+            {canManageWorkspace && (
               <QuickAction
                 to="/clients"
                 title="Clients"
-                description="Manage saved clients and autofill job report details faster."
-                buttonLabel="Manage"
+                description="Manage saved clients for faster autofill."
+                label="Manage"
                 tone="green"
               />
             )}
@@ -1134,16 +1309,16 @@ const Dashboard = () => {
                 <QuickAction
                   to="/team"
                   title="Team"
-                  description="Invite workers and supervisors to your company workspace."
-                  buttonLabel="Invite"
+                  description="Invite workers and supervisors to the workspace."
+                  label="Invite"
                   tone="amber"
                 />
 
                 <QuickAction
                   to="/business-profile"
                   title="Business Profile"
-                  description="Update company details, logo and contact information used in reports."
-                  buttonLabel="Update"
+                  description="Control company branding used in reports and PDFs."
+                  label="Update"
                   tone="blue"
                 />
               </>
@@ -1153,8 +1328,8 @@ const Dashboard = () => {
               <QuickAction
                 to="/team"
                 title="Team"
-                description="Review active members in your company workspace."
-                buttonLabel="Open"
+                description="Review active users in your workspace."
+                label="Open"
                 tone="amber"
               />
             )}
