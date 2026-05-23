@@ -44,6 +44,12 @@ const resizeImageFile = (file) => {
         canvas.height = height;
 
         const context = canvas.getContext("2d");
+
+        if (!context) {
+          reject(new Error("There was an error preparing this image."));
+          return;
+        }
+
         context.drawImage(image, 0, 0, width, height);
 
         canvas.toBlob(
@@ -386,16 +392,16 @@ const ReportForm = ({
 
         <div className="photo-action-grid">
           <div>
-            <label
-              htmlFor={`${inputId}Camera`}
-              className={
-                hasReachedLimit
-                  ? "btn btn-primary w-100 disabled"
-                  : "btn btn-primary w-100"
-              }
+            <button
+              type="button"
+              className="btn btn-primary w-100"
+              disabled={hasReachedLimit}
+              onClick={() => {
+                document.getElementById(`${inputId}Camera`)?.click();
+              }}
             >
               Take photo
-            </label>
+            </button>
 
             <input
               id={`${inputId}Camera`}
@@ -409,16 +415,16 @@ const ReportForm = ({
           </div>
 
           <div>
-            <label
-              htmlFor={`${inputId}Gallery`}
-              className={
-                hasReachedLimit
-                  ? "btn btn-outline-primary w-100 disabled"
-                  : "btn btn-outline-primary w-100"
-              }
+            <button
+              type="button"
+              className="btn btn-outline-primary w-100"
+              disabled={hasReachedLimit}
+              onClick={() => {
+                document.getElementById(`${inputId}Gallery`)?.click();
+              }}
             >
               Upload from gallery
-            </label>
+            </button>
 
             <input
               id={`${inputId}Gallery`}
@@ -494,6 +500,7 @@ const ReportForm = ({
             <label htmlFor="clientName" className="form-label">
               Client name
             </label>
+
             <input
               id="clientName"
               type="text"
@@ -509,6 +516,7 @@ const ReportForm = ({
             <label htmlFor="clientCompanyName" className="form-label">
               Client company
             </label>
+
             <input
               id="clientCompanyName"
               type="text"
@@ -524,6 +532,7 @@ const ReportForm = ({
             <label htmlFor="clientContactPerson" className="form-label">
               Contact person
             </label>
+
             <input
               id="clientContactPerson"
               type="text"
@@ -540,6 +549,7 @@ const ReportForm = ({
               <label htmlFor="clientEmail" className="form-label">
                 Client email
               </label>
+
               <input
                 id="clientEmail"
                 type="email"
@@ -555,6 +565,7 @@ const ReportForm = ({
               <label htmlFor="clientPhone" className="form-label">
                 Client phone
               </label>
+
               <input
                 id="clientPhone"
                 type="text"
@@ -571,6 +582,7 @@ const ReportForm = ({
             <label htmlFor="jobAddress" className="form-label">
               Job address
             </label>
+
             <input
               id="jobAddress"
               type="text"
@@ -586,6 +598,7 @@ const ReportForm = ({
             <label htmlFor="clientAccessNotes" className="form-label">
               Access notes
             </label>
+
             <textarea
               id="clientAccessNotes"
               className="form-control"
@@ -601,6 +614,7 @@ const ReportForm = ({
             <label htmlFor="jobDate" className="form-label">
               Job date
             </label>
+
             <input
               id="jobDate"
               type="date"
@@ -616,6 +630,7 @@ const ReportForm = ({
               <label htmlFor="startingHour" className="form-label">
                 Starting hour
               </label>
+
               <input
                 id="startingHour"
                 type="time"
@@ -630,6 +645,7 @@ const ReportForm = ({
               <label htmlFor="finishHour" className="form-label">
                 Finish hour
               </label>
+
               <input
                 id="finishHour"
                 type="time"
@@ -645,6 +661,7 @@ const ReportForm = ({
             <label htmlFor="totalHours" className="form-label">
               Total hours
             </label>
+
             <input
               id="totalHours"
               type="text"
@@ -660,6 +677,7 @@ const ReportForm = ({
             <label htmlFor="serviceType" className="form-label">
               Service type
             </label>
+
             <input
               id="serviceType"
               type="text"
@@ -705,6 +723,7 @@ const ReportForm = ({
             <label htmlFor="workCompleted" className="form-label">
               Work completed
             </label>
+
             <textarea
               id="workCompleted"
               className="form-control"
@@ -720,6 +739,7 @@ const ReportForm = ({
             <label htmlFor="issuesFound" className="form-label">
               Issues found
             </label>
+
             <textarea
               id="issuesFound"
               className="form-control"
@@ -735,6 +755,7 @@ const ReportForm = ({
             <label htmlFor="recommendations" className="form-label">
               Recommendations
             </label>
+
             <textarea
               id="recommendations"
               className="form-control"
@@ -751,6 +772,7 @@ const ReportForm = ({
           <div className="d-flex justify-content-between align-items-start gap-3 mb-3">
             <div>
               <h3 className="h5 mb-1">Internal team notes</h3>
+
               <p className="text-muted small mb-0">
                 These notes are for your internal team. They are not shown in the
                 public client view.
@@ -762,6 +784,7 @@ const ReportForm = ({
             <label htmlFor="internalNotes" className="form-label">
               Internal notes
             </label>
+
             <textarea
               id="internalNotes"
               className="form-control"
@@ -777,6 +800,7 @@ const ReportForm = ({
             <label htmlFor="supervisorNotes" className="form-label">
               Supervisor notes
             </label>
+
             <textarea
               id="supervisorNotes"
               className="form-control"
@@ -792,6 +816,7 @@ const ReportForm = ({
             <label htmlFor="completionNotes" className="form-label">
               Completion notes
             </label>
+
             <textarea
               id="completionNotes"
               className="form-control"
