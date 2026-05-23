@@ -45,6 +45,19 @@ const formatDate = (dateValue) => {
   });
 };
 
+const formatClientTypeLabel = (clientType) => {
+  const option = CLIENT_TYPE_OPTIONS.find((item) => item.value === clientType);
+  return option?.label || "Client";
+};
+
+const getClientTypeClass = (clientType) => {
+  if (clientType === "company") return "company";
+  if (clientType === "property_manager") return "property";
+  if (clientType === "agency") return "agency";
+  if (clientType === "site") return "site";
+  return "individual";
+};
+
 const mapClientToForm = (client) => ({
   clientDisplayName: client.client_display_name || "",
   clientType: client.client_type || "individual",
@@ -84,6 +97,16 @@ const buildClientPayload = ({ formData, profile, user }) => ({
   updated_at: new Date().toISOString(),
 });
 
+const StatCard = ({ label, value, helper, tone = "default" }) => {
+  return (
+    <div className={`jp-client-stat ${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      {helper && <small>{helper}</small>}
+    </div>
+  );
+};
+
 const Clients = () => {
   const { user, profile, displayRole, profileLoading } = useAuth();
 
@@ -92,6 +115,7 @@ const Clients = () => {
   const [editingClientId, setEditingClientId] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("active");
+  const [typeFilter, setTypeFilter] = useState("all");
   const [loadingClients, setLoadingClients] = useState(true);
   const [savingClient, setSavingClient] = useState(false);
   const [updatingClientId, setUpdatingClientId] = useState(null);
@@ -108,6 +132,9 @@ const Clients = () => {
         statusFilter === "all" ||
         (statusFilter === "active" && client.active) ||
         (statusFilter === "inactive" && !client.active);
+
+      const matchesType =
+        typeFilter === "all" || client.client_type === typeFilter;
 
       const searchText = [
         client.client_display_name,
@@ -129,9 +156,9 @@ const Clients = () => {
       const matchesSearch =
         !normalizedSearch || searchText.includes(normalizedSearch);
 
-      return matchesStatus && matchesSearch;
+      return matchesStatus && matchesType && matchesSearch;
     });
-  }, [clients, searchTerm, statusFilter]);
+  }, [clients, searchTerm, statusFilter, typeFilter]);
 
   const activeClientsCount = useMemo(() => {
     return clients.filter((client) => client.active).length;
@@ -139,6 +166,16 @@ const Clients = () => {
 
   const inactiveClientsCount = useMemo(() => {
     return clients.filter((client) => !client.active).length;
+  }, [clients]);
+
+  const companyClientsCount = useMemo(() => {
+    return clients.filter((client) =>
+      ["company", "property_manager", "agency"].includes(client.client_type)
+    ).length;
+  }, [clients]);
+
+  const jobSitesCount = useMemo(() => {
+    return clients.filter((client) => client.client_type === "site").length;
   }, [clients]);
 
   const loadClients = async () => {
@@ -509,60 +546,585 @@ const Clients = () => {
   }
 
   return (
-    <section>
-      <div className="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4">
-        <div>
-          <p className="eyebrow mb-2">Client database</p>
+    <>
+      <style>
+        {`
+          .jp-clients-page {
+            display: grid;
+            gap: 22px;
+          }
 
-          <h1 className="section-title mb-2">Clients</h1>
+          .jp-clients-hero {
+            position: relative;
+            overflow: hidden;
+            display: grid;
+            grid-template-columns: 1.3fr auto;
+            gap: 22px;
+            align-items: end;
+            padding: 28px;
+            border-radius: 34px;
+            color: #ffffff;
+            background:
+              radial-gradient(circle at top right, rgba(245, 158, 11, 0.36), transparent 30%),
+              linear-gradient(135deg, #020617, #1e40af);
+            box-shadow: 0 26px 74px rgba(15, 23, 42, 0.24);
+          }
 
-          <p className="section-subtitle mb-0">
-            Save client and job site details once, then use them to autofill
-            future reports.
-          </p>
+          .jp-clients-eyebrow {
+            display: inline-flex;
+            margin-bottom: 12px;
+            color: #bfdbfe;
+            font-size: 0.76rem;
+            font-weight: 950;
+            text-transform: uppercase;
+            letter-spacing: 0.13em;
+          }
+
+          .jp-clients-hero h1 {
+            margin: 0;
+            max-width: 760px;
+            font-size: clamp(2.1rem, 5vw, 3.6rem);
+            line-height: 0.94;
+            font-weight: 950;
+            letter-spacing: -0.07em;
+          }
+
+          .jp-clients-hero p {
+            max-width: 680px;
+            margin: 16px 0 0;
+            color: #dbeafe;
+            font-size: 1rem;
+            line-height: 1.65;
+            font-weight: 650;
+          }
+
+          .jp-clients-hero-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+          }
+
+          .jp-clients-hero-actions .btn {
+            min-height: 44px;
+            border-radius: 999px;
+            font-weight: 900;
+          }
+
+          .jp-client-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+          }
+
+          .jp-client-stat {
+            min-height: 128px;
+            padding: 20px;
+            border-radius: 24px;
+            background: #ffffff;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            box-shadow: 0 16px 42px rgba(15, 23, 42, 0.07);
+          }
+
+          .jp-client-stat span {
+            display: block;
+            color: #64748b;
+            font-size: 0.76rem;
+            font-weight: 950;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+          }
+
+          .jp-client-stat strong {
+            display: block;
+            margin-top: 10px;
+            color: #0f172a;
+            font-size: 2.15rem;
+            line-height: 1;
+            font-weight: 950;
+            letter-spacing: -0.06em;
+          }
+
+          .jp-client-stat small {
+            display: block;
+            margin-top: 12px;
+            color: #64748b;
+            font-size: 0.82rem;
+            font-weight: 650;
+            line-height: 1.35;
+          }
+
+          .jp-client-stat.green {
+            background: linear-gradient(180deg, #ffffff, #f0fdf4);
+            border-color: rgba(22, 101, 52, 0.18);
+          }
+
+          .jp-client-stat.amber {
+            background: linear-gradient(180deg, #ffffff, #fffbeb);
+            border-color: rgba(245, 158, 11, 0.22);
+          }
+
+          .jp-client-stat.blue {
+            background: linear-gradient(180deg, #ffffff, #eff6ff);
+            border-color: rgba(30, 64, 175, 0.18);
+          }
+
+          .jp-clients-layout {
+            display: grid;
+            grid-template-columns: minmax(330px, 0.78fr) minmax(0, 1.22fr);
+            gap: 20px;
+            align-items: start;
+          }
+
+          .jp-clients-panel {
+            padding: 22px;
+            border-radius: 28px;
+            background: #ffffff;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            box-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+          }
+
+          .jp-clients-panel.sticky {
+            position: sticky;
+            top: 96px;
+          }
+
+          .jp-clients-panel-header {
+            margin-bottom: 18px;
+          }
+
+          .jp-clients-panel-header h2 {
+            margin: 0;
+            color: #0f172a;
+            font-size: 1.3rem;
+            font-weight: 950;
+            letter-spacing: -0.04em;
+          }
+
+          .jp-clients-panel-header p {
+            margin: 6px 0 0;
+            color: #64748b;
+            font-weight: 650;
+            line-height: 1.45;
+          }
+
+          .jp-client-form-grid {
+            display: grid;
+            gap: 14px;
+          }
+
+          .jp-client-form-grid.two {
+            grid-template-columns: 1fr 1fr;
+          }
+
+          .jp-client-form-grid.three {
+            grid-template-columns: 1.2fr 0.8fr 0.8fr;
+          }
+
+          .jp-clients-page .form-label {
+            color: #334155;
+            font-size: 0.82rem;
+            font-weight: 900;
+          }
+
+          .jp-clients-page .form-control,
+          .jp-clients-page .form-select {
+            min-height: 44px;
+            border-radius: 14px;
+            border-color: rgba(15, 23, 42, 0.14);
+            font-weight: 650;
+          }
+
+          .jp-client-search-panel {
+            display: grid;
+            gap: 14px;
+            margin-bottom: 16px;
+          }
+
+          .jp-client-filter-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+          }
+
+          .jp-client-filter {
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            border-radius: 999px;
+            padding: 8px 12px;
+            color: #475569;
+            background: #ffffff;
+            font-size: 0.82rem;
+            font-weight: 900;
+          }
+
+          .jp-client-filter.active {
+            color: #1e40af;
+            background: #eff6ff;
+            border-color: rgba(30, 64, 175, 0.22);
+          }
+
+          .jp-client-card-grid {
+            display: grid;
+            gap: 14px;
+          }
+
+          .jp-client-card {
+            overflow: hidden;
+            border-radius: 24px;
+            background: #ffffff;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            box-shadow: 0 14px 38px rgba(15, 23, 42, 0.06);
+          }
+
+          .jp-client-card-top {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 14px;
+            padding: 18px;
+            background: linear-gradient(180deg, #ffffff, #f8fafc);
+          }
+
+          .jp-client-card h3 {
+            margin: 0;
+            color: #0f172a;
+            font-size: 1.05rem;
+            font-weight: 950;
+            letter-spacing: -0.04em;
+          }
+
+          .jp-client-card-subtitle {
+            margin: 5px 0 0;
+            color: #64748b;
+            font-size: 0.88rem;
+            font-weight: 750;
+          }
+
+          .jp-client-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            margin-top: 12px;
+          }
+
+          .jp-client-badge {
+            display: inline-flex;
+            align-items: center;
+            width: fit-content;
+            padding: 5px 8px;
+            border-radius: 999px;
+            font-size: 0.68rem;
+            font-weight: 950;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+          }
+
+          .jp-client-badge.active {
+            color: #166534;
+            background: #f0fdf4;
+            border: 1px solid rgba(22, 101, 52, 0.18);
+          }
+
+          .jp-client-badge.inactive {
+            color: #475569;
+            background: #f1f5f9;
+            border: 1px solid rgba(15, 23, 42, 0.1);
+          }
+
+          .jp-client-badge.individual {
+            color: #1e40af;
+            background: #eff6ff;
+            border: 1px solid rgba(30, 64, 175, 0.18);
+          }
+
+          .jp-client-badge.company,
+          .jp-client-badge.property {
+            color: #92400e;
+            background: #fffbeb;
+            border: 1px solid rgba(245, 158, 11, 0.22);
+          }
+
+          .jp-client-badge.agency {
+            color: #6d28d9;
+            background: #f5f3ff;
+            border: 1px solid rgba(109, 40, 217, 0.18);
+          }
+
+          .jp-client-badge.site {
+            color: #166534;
+            background: #f0fdf4;
+            border: 1px solid rgba(22, 101, 52, 0.18);
+          }
+
+          .jp-client-main-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            align-items: flex-end;
+          }
+
+          .jp-client-main-actions .btn {
+            min-width: 126px;
+            border-radius: 999px;
+            font-weight: 850;
+          }
+
+          .jp-client-details {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            padding: 0 18px 18px;
+          }
+
+          .jp-client-detail {
+            padding: 12px;
+            border-radius: 16px;
+            background: #f8fafc;
+            border: 1px solid rgba(15, 23, 42, 0.06);
+          }
+
+          .jp-client-detail span {
+            display: block;
+            color: #64748b;
+            font-size: 0.72rem;
+            font-weight: 950;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+          }
+
+          .jp-client-detail strong {
+            display: block;
+            margin-top: 4px;
+            color: #0f172a;
+            font-size: 0.88rem;
+            font-weight: 850;
+            word-break: break-word;
+          }
+
+          .jp-client-notes {
+            display: grid;
+            gap: 10px;
+            padding: 0 18px 18px;
+          }
+
+          .jp-client-note {
+            padding: 12px;
+            border-radius: 16px;
+            background: #fffbeb;
+            border: 1px solid rgba(245, 158, 11, 0.18);
+          }
+
+          .jp-client-note.internal {
+            background: #eff6ff;
+            border-color: rgba(30, 64, 175, 0.16);
+          }
+
+          .jp-client-note strong {
+            display: block;
+            color: #0f172a;
+            font-size: 0.78rem;
+            font-weight: 950;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+          }
+
+          .jp-client-note p {
+            margin: 5px 0 0;
+            color: #475569;
+            font-size: 0.86rem;
+            font-weight: 650;
+            line-height: 1.45;
+          }
+
+          .jp-client-card-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 18px;
+            border-top: 1px solid rgba(15, 23, 42, 0.07);
+            background: #ffffff;
+          }
+
+          .jp-client-card-footer small {
+            color: #64748b;
+            font-weight: 650;
+          }
+
+          .jp-client-card-footer .btn {
+            border-radius: 999px;
+            font-weight: 850;
+          }
+
+          .jp-client-empty {
+            display: grid;
+            place-items: center;
+            min-height: 240px;
+            padding: 28px;
+            border-radius: 24px;
+            text-align: center;
+            background: #f8fafc;
+            border: 1px dashed rgba(15, 23, 42, 0.16);
+          }
+
+          .jp-client-empty h3 {
+            color: #0f172a;
+            font-weight: 950;
+          }
+
+          .jp-client-empty p {
+            color: #64748b;
+            font-weight: 650;
+          }
+
+          @media (max-width: 991px) {
+            .jp-clients-hero,
+            .jp-clients-layout {
+              grid-template-columns: 1fr;
+            }
+
+            .jp-clients-panel.sticky {
+              position: static;
+            }
+
+            .jp-client-stats-grid {
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+          }
+
+          @media (max-width: 576px) {
+            .jp-clients-page {
+              gap: 18px;
+            }
+
+            .jp-clients-hero {
+              padding: 22px;
+              border-radius: 26px;
+            }
+
+            .jp-clients-hero h1 {
+              font-size: 2.2rem;
+            }
+
+            .jp-clients-hero-actions {
+              display: grid;
+              grid-template-columns: 1fr;
+            }
+
+            .jp-clients-hero-actions .btn {
+              width: 100%;
+            }
+
+            .jp-client-stats-grid,
+            .jp-client-form-grid.two,
+            .jp-client-form-grid.three,
+            .jp-client-details {
+              grid-template-columns: 1fr;
+            }
+
+            .jp-clients-panel {
+              padding: 18px;
+              border-radius: 24px;
+            }
+
+            .jp-client-card-top {
+              grid-template-columns: 1fr;
+            }
+
+            .jp-client-main-actions {
+              align-items: stretch;
+            }
+
+            .jp-client-main-actions .btn {
+              width: 100%;
+            }
+
+            .jp-client-card-footer {
+              flex-direction: column;
+              align-items: stretch;
+            }
+
+            .jp-client-card-footer .btn {
+              width: 100%;
+            }
+          }
+        `}
+      </style>
+
+      <section className="jp-clients-page">
+        <div className="jp-clients-hero">
+          <div>
+            <span className="jp-clients-eyebrow">Client database</span>
+
+            <h1>Clients & Job Sites</h1>
+
+            <p>
+              Manage saved clients, job locations, contact details, access
+              notes and default service information for faster, cleaner reports.
+            </p>
+          </div>
+
+          <div className="jp-clients-hero-actions">
+            <a href="#client-form" className="btn btn-light">
+              Add Client
+            </a>
+
+            <Link to="/create-report" className="btn btn-outline-light">
+              Create Report
+            </Link>
+          </div>
         </div>
-      </div>
 
-      {message && (
-        <div className={`alert alert-${message.type}`} role="alert">
-          {message.text}
+        {message && (
+          <div className={`alert alert-${message.type}`} role="alert">
+            {message.text}
+          </div>
+        )}
+
+        <div className="jp-client-stats-grid">
+          <StatCard
+            label="Total clients"
+            value={clients.length}
+            helper="All saved client records"
+          />
+
+          <StatCard
+            label="Active clients"
+            value={activeClientsCount}
+            helper="Available for report autofill"
+            tone="green"
+          />
+
+          <StatCard
+            label="Companies"
+            value={companyClientsCount}
+            helper="Companies, agencies and managers"
+            tone="amber"
+          />
+
+          <StatCard
+            label="Job sites"
+            value={jobSitesCount}
+            helper="Specific saved work locations"
+            tone="blue"
+          />
         </div>
-      )}
 
-      <div className="clients-overview-grid mb-4">
-        <div className="clients-overview-card">
-          <span>Total clients</span>
-          <strong>{clients.length}</strong>
-        </div>
-
-        <div className="clients-overview-card">
-          <span>Active</span>
-          <strong>{activeClientsCount}</strong>
-        </div>
-
-        <div className="clients-overview-card">
-          <span>Inactive</span>
-          <strong>{inactiveClientsCount}</strong>
-        </div>
-      </div>
-
-      <div className="row g-4">
-        <div className="col-lg-5">
+        <div className="jp-clients-layout">
           <form
-            className="card shadow-sm border-0 clients-card"
+            id="client-form"
+            className="jp-clients-panel sticky"
             onSubmit={handleSaveClient}
           >
-            <div className="card-body p-4">
-              <h2 className="h4 mb-3">
-                {editingClientId ? "Edit client" : "Create client"}
-              </h2>
+            <div className="jp-clients-panel-header">
+              <h2>{editingClientId ? "Edit client" : "Add new client"}</h2>
 
-              <p className="text-muted mb-4">
-                Add the client, company or job site details that your team will
-                use when creating reports.
+              <p>
+                Store the details your team needs for fast report creation and
+                fewer manual entry errors.
               </p>
+            </div>
 
-              <div className="mb-3">
+            <div className="jp-client-form-grid">
+              <div>
                 <label htmlFor="clientDisplayName" className="form-label">
                   Client display name
                 </label>
@@ -578,11 +1140,11 @@ const Clients = () => {
                 />
 
                 <small className="text-muted">
-                  This is the name your team will search for in reports.
+                  This is the searchable name used in reports.
                 </small>
               </div>
 
-              <div className="mb-3">
+              <div>
                 <label htmlFor="clientType" className="form-label">
                   Client type
                 </label>
@@ -602,7 +1164,7 @@ const Clients = () => {
                 </select>
               </div>
 
-              <div className="mb-3">
+              <div>
                 <label htmlFor="companyName" className="form-label">
                   Company name
                 </label>
@@ -618,7 +1180,7 @@ const Clients = () => {
                 />
               </div>
 
-              <div className="mb-3">
+              <div>
                 <label htmlFor="contactPerson" className="form-label">
                   Contact person
                 </label>
@@ -634,8 +1196,8 @@ const Clients = () => {
                 />
               </div>
 
-              <div className="row g-3">
-                <div className="col-md-6">
+              <div className="jp-client-form-grid two">
+                <div>
                   <label htmlFor="email" className="form-label">
                     Email
                   </label>
@@ -651,7 +1213,7 @@ const Clients = () => {
                   />
                 </div>
 
-                <div className="col-md-6">
+                <div>
                   <label htmlFor="phone" className="form-label">
                     Phone
                   </label>
@@ -668,7 +1230,7 @@ const Clients = () => {
                 </div>
               </div>
 
-              <div className="mt-3">
+              <div>
                 <label htmlFor="jobAddress" className="form-label">
                   Job address
                 </label>
@@ -684,8 +1246,8 @@ const Clients = () => {
                 />
               </div>
 
-              <div className="row g-3 mt-1">
-                <div className="col-md-5">
+              <div className="jp-client-form-grid three">
+                <div>
                   <label htmlFor="suburb" className="form-label">
                     Suburb
                   </label>
@@ -701,7 +1263,7 @@ const Clients = () => {
                   />
                 </div>
 
-                <div className="col-md-3">
+                <div>
                   <label htmlFor="state" className="form-label">
                     State
                   </label>
@@ -717,7 +1279,7 @@ const Clients = () => {
                   />
                 </div>
 
-                <div className="col-md-4">
+                <div>
                   <label htmlFor="postcode" className="form-label">
                     Postcode
                   </label>
@@ -734,7 +1296,7 @@ const Clients = () => {
                 </div>
               </div>
 
-              <div className="mt-3">
+              <div>
                 <label htmlFor="country" className="form-label">
                   Country
                 </label>
@@ -750,7 +1312,7 @@ const Clients = () => {
                 />
               </div>
 
-              <div className="mt-3">
+              <div>
                 <label htmlFor="defaultServiceType" className="form-label">
                   Default service type
                 </label>
@@ -766,7 +1328,7 @@ const Clients = () => {
                 />
               </div>
 
-              <div className="mt-3">
+              <div>
                 <label htmlFor="accessNotes" className="form-label">
                   Access notes
                 </label>
@@ -782,7 +1344,7 @@ const Clients = () => {
                 />
               </div>
 
-              <div className="mt-3">
+              <div>
                 <label htmlFor="internalNotes" className="form-label">
                   Internal notes
                 </label>
@@ -798,7 +1360,7 @@ const Clients = () => {
                 />
               </div>
 
-              <div className="form-check form-switch mt-3">
+              <div className="form-check form-switch">
                 <input
                   id="active"
                   type="checkbox"
@@ -813,7 +1375,7 @@ const Clients = () => {
                 </label>
               </div>
 
-              <div className="d-flex gap-2 flex-wrap mt-4">
+              <div className="d-flex gap-2 flex-wrap">
                 <button
                   type="submit"
                   className="btn btn-primary"
@@ -839,157 +1401,230 @@ const Clients = () => {
               </div>
             </div>
           </form>
-        </div>
 
-        <div className="col-lg-7">
-          <div className="card shadow-sm border-0 clients-card mb-4">
-            <div className="card-body p-4">
-              <div className="row g-3 align-items-end">
-                <div className="col-md-8">
-                  <label htmlFor="clientSearch" className="form-label">
-                    Search clients
-                  </label>
+          <div>
+            <div className="jp-clients-panel jp-client-search-panel">
+              <div className="jp-clients-panel-header">
+                <h2>Saved records</h2>
 
-                  <input
-                    id="clientSearch"
-                    type="search"
-                    className="form-control"
-                    value={searchTerm}
-                    onChange={(event) => setSearchTerm(event.target.value)}
-                    placeholder="Search by name, company, contact, email, phone or address..."
-                  />
-                </div>
+                <p>
+                  Search, filter, edit and reuse client records when creating
+                  reports.
+                </p>
+              </div>
 
-                <div className="col-md-4">
-                  <label htmlFor="statusFilter" className="form-label">
-                    Status
-                  </label>
+              <div>
+                <label htmlFor="clientSearch" className="form-label">
+                  Search clients
+                </label>
 
-                  <select
-                    id="statusFilter"
-                    className="form-select"
-                    value={statusFilter}
-                    onChange={(event) => setStatusFilter(event.target.value)}
+                <input
+                  id="clientSearch"
+                  type="search"
+                  className="form-control"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Search by name, company, contact, email, phone, service or address..."
+                />
+              </div>
+
+              <div className="jp-client-filter-row">
+                {[
+                  { value: "active", label: "Active" },
+                  { value: "all", label: "All" },
+                  { value: "inactive", label: "Inactive" },
+                ].map((filter) => (
+                  <button
+                    key={filter.value}
+                    type="button"
+                    className={
+                      statusFilter === filter.value
+                        ? "jp-client-filter active"
+                        : "jp-client-filter"
+                    }
+                    onClick={() => setStatusFilter(filter.value)}
                   >
-                    <option value="active">Active only</option>
-                    <option value="all">All clients</option>
-                    <option value="inactive">Inactive only</option>
-                  </select>
-                </div>
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="jp-client-filter-row">
+                <button
+                  type="button"
+                  className={
+                    typeFilter === "all"
+                      ? "jp-client-filter active"
+                      : "jp-client-filter"
+                  }
+                  onClick={() => setTypeFilter("all")}
+                >
+                  All types
+                </button>
+
+                {CLIENT_TYPE_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={
+                      typeFilter === option.value
+                        ? "jp-client-filter active"
+                        : "jp-client-filter"
+                    }
+                    onClick={() => setTypeFilter(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
               </div>
             </div>
-          </div>
 
-          <div className="card shadow-sm border-0 clients-card">
-            <div className="card-body p-4">
-              <div className="d-flex justify-content-between align-items-start gap-3 mb-3">
-                <div>
-                  <h2 className="h4 mb-1">Saved clients</h2>
-                  <p className="text-muted mb-0">
-                    {filteredClients.length} records found
-                  </p>
-                </div>
-              </div>
-
+            <div className="jp-client-card-grid">
               {filteredClients.length === 0 ? (
-                <div className="clients-empty-state">
-                  <p className="text-muted mb-0">
-                    No clients found. Create your first client to start using
-                    autofill in reports.
-                  </p>
+                <div className="jp-client-empty">
+                  <div>
+                    <h3>No clients found</h3>
+
+                    <p>
+                      Create your first client or adjust your filters to see
+                      more records.
+                    </p>
+
+                    <a href="#client-form" className="btn btn-primary">
+                      Add Client
+                    </a>
+                  </div>
                 </div>
               ) : (
-                <div className="clients-list">
-                  {filteredClients.map((client) => (
-                    <div className="client-list-card" key={client.id}>
-                      <div className="client-list-main">
-                        <div>
-                          <div className="d-flex flex-wrap align-items-center gap-2 mb-1">
-                            <h3>{client.client_display_name}</h3>
+                filteredClients.map((client) => (
+                  <article className="jp-client-card" key={client.id}>
+                    <div className="jp-client-card-top">
+                      <div>
+                        <h3>{client.client_display_name}</h3>
 
-                            <span
-                              className={`badge ${
-                                client.active ? "bg-success" : "bg-secondary"
-                              }`}
-                            >
-                              {client.active ? "active" : "inactive"}
-                            </span>
-                          </div>
+                        <p className="jp-client-card-subtitle">
+                          {client.company_name || "No company name"} ·{" "}
+                          {client.contact_person || "No contact person"}
+                        </p>
 
-                          <p className="mb-1">
-                            {client.company_name || "No company name"} ·{" "}
-                            {client.contact_person || "No contact person"}
-                          </p>
-
-                          <p className="text-muted small mb-0">
-                            {client.job_address || "No address"}
-                            {client.suburb ? `, ${client.suburb}` : ""}
-                            {client.state ? ` ${client.state}` : ""}
-                            {client.postcode ? ` ${client.postcode}` : ""}
-                          </p>
-                        </div>
-
-                        <div className="client-list-meta">
-                          <span>{client.email || "No email"}</span>
-                          <span>{client.phone || "No phone"}</span>
-                          <span>
-                            {client.default_service_type || "No default service"}
+                        <div className="jp-client-badges">
+                          <span
+                            className={`jp-client-badge ${
+                              client.active ? "active" : "inactive"
+                            }`}
+                          >
+                            {client.active ? "Active" : "Inactive"}
                           </span>
-                          <span>Created {formatDate(client.created_at)}</span>
+
+                          <span
+                            className={`jp-client-badge ${getClientTypeClass(
+                              client.client_type
+                            )}`}
+                          >
+                            {formatClientTypeLabel(client.client_type)}
+                          </span>
+
+                          {client.access_notes && (
+                            <span className="jp-client-badge company">
+                              Access notes
+                            </span>
+                          )}
                         </div>
                       </div>
 
-                      {(client.access_notes || client.internal_notes) && (
-                        <div className="client-notes-preview">
-                          {client.access_notes && (
-                            <p>
-                              <strong>Access:</strong> {client.access_notes}
-                            </p>
-                          )}
+                      <div className="jp-client-main-actions">
+                        <Link
+                          to={`/create-report?clientId=${client.id}`}
+                          className="btn btn-primary btn-sm"
+                        >
+                          Use in Report
+                        </Link>
 
-                          {client.internal_notes && (
-                            <p>
-                              <strong>Internal:</strong> {client.internal_notes}
-                            </p>
-                          )}
-                        </div>
-                      )}
-
-                      <div className="d-flex gap-2 flex-wrap mt-3">
                         <button
                           type="button"
-                          className="btn btn-sm btn-outline-primary"
+                          className="btn btn-outline-primary btn-sm"
                           onClick={() => handleEditClient(client)}
                         >
                           Edit
                         </button>
-
-                        <button
-                          type="button"
-                          className={`btn btn-sm ${
-                            client.active
-                              ? "btn-outline-danger"
-                              : "btn-outline-success"
-                          }`}
-                          onClick={() => handleToggleClientStatus(client)}
-                          disabled={updatingClientId === client.id}
-                        >
-                          {updatingClientId === client.id
-                            ? "Updating..."
-                            : client.active
-                            ? "Deactivate"
-                            : "Reactivate"}
-                        </button>
                       </div>
                     </div>
-                  ))}
-                </div>
+
+                    <div className="jp-client-details">
+                      <div className="jp-client-detail">
+                        <span>Email</span>
+                        <strong>{client.email || "No email"}</strong>
+                      </div>
+
+                      <div className="jp-client-detail">
+                        <span>Phone</span>
+                        <strong>{client.phone || "No phone"}</strong>
+                      </div>
+
+                      <div className="jp-client-detail">
+                        <span>Default service</span>
+                        <strong>
+                          {client.default_service_type || "No default service"}
+                        </strong>
+                      </div>
+
+                      <div className="jp-client-detail">
+                        <span>Location</span>
+                        <strong>
+                          {client.job_address || "No address"}
+                          {client.suburb ? `, ${client.suburb}` : ""}
+                          {client.state ? ` ${client.state}` : ""}
+                          {client.postcode ? ` ${client.postcode}` : ""}
+                        </strong>
+                      </div>
+                    </div>
+
+                    {(client.access_notes || client.internal_notes) && (
+                      <div className="jp-client-notes">
+                        {client.access_notes && (
+                          <div className="jp-client-note">
+                            <strong>Access notes</strong>
+                            <p>{client.access_notes}</p>
+                          </div>
+                        )}
+
+                        {client.internal_notes && (
+                          <div className="jp-client-note internal">
+                            <strong>Internal notes</strong>
+                            <p>{client.internal_notes}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="jp-client-card-footer">
+                      <small>Created {formatDate(client.created_at)}</small>
+
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${
+                          client.active
+                            ? "btn-outline-danger"
+                            : "btn-outline-success"
+                        }`}
+                        onClick={() => handleToggleClientStatus(client)}
+                        disabled={updatingClientId === client.id}
+                      >
+                        {updatingClientId === client.id
+                          ? "Updating..."
+                          : client.active
+                          ? "Deactivate"
+                          : "Reactivate"}
+                      </button>
+                    </div>
+                  </article>
+                ))
               )}
             </div>
           </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </>
   );
 };
 
