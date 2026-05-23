@@ -1,187 +1,193 @@
-import { NavLink, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabaseClient";
+
+const formatRoleLabel = (role) => {
+  if (!role) return "User";
+
+  const roleMap = {
+    admin: "Admin",
+    supervisor: "Supervisor",
+    worker: "Worker",
+  };
+
+  return roleMap[role] || role.charAt(0).toUpperCase() + role.slice(1);
+};
+
+const getInitials = (nameOrEmail) => {
+  if (!nameOrEmail) return "JP";
+
+  const cleanValue = String(nameOrEmail).trim();
+
+  const parts = cleanValue
+    .replace(/@.*/, "")
+    .split(" ")
+    .filter(Boolean);
+
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  }
+
+  return cleanValue.slice(0, 2).toUpperCase();
+};
 
 const Navbar = () => {
   const navigate = useNavigate();
-  const { user, profile, displayName, signOut } = useAuth();
+  const location = useLocation();
+  const { user, profile, displayName } = useAuth();
 
-  const isAdmin = profile?.role === "admin";
-  const isSupervisor = profile?.role === "supervisor";
-  const isWorker = profile?.role === "worker";
-  const canManageTeam = isAdmin || isSupervisor;
-  const canManageClients = isAdmin || isSupervisor;
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const isAuthenticated = Boolean(user);
+  const role = profile?.role || "";
+  const isAdmin = role === "admin";
+  const isSupervisor = role === "supervisor";
+  const canManageWorkspace = isAdmin || isSupervisor;
+
+  const userName =
+    displayName ||
+    profile?.full_name ||
+    user?.user_metadata?.full_name ||
+    user?.email ||
+    "JobProof user";
+
+  const userEmail = user?.email || "";
+  const roleLabel = formatRoleLabel(role);
+
+  useEffect(() => {
+    setIsMenuOpen(false);
+  }, [location.pathname]);
 
   const handleLogout = async () => {
-    await signOut();
-    navigate("/login");
-  };
+    setIsLoggingOut(true);
 
-  const closeMobileMenu = () => {
-    const navbarCollapse = document.getElementById("jobproofNavbar");
-
-    if (navbarCollapse?.classList.contains("show")) {
-      navbarCollapse.classList.remove("show");
+    try {
+      await supabase.auth.signOut();
+      navigate("/login", { replace: true });
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      setIsLoggingOut(false);
+      setIsMenuOpen(false);
     }
   };
 
-  const getNavLinkClass = ({ isActive }) => {
-    return isActive ? "nav-link active" : "nav-link";
-  };
+  const getNavLinkClass = ({ isActive }) =>
+    isActive ? "jp-nav-link active" : "jp-nav-link";
 
   return (
-    <nav className="navbar navbar-expand-lg navbar-light bg-white border-bottom sticky-top jobproof-navbar">
-      <div className="container">
-        <NavLink className="navbar-brand fw-bold" to="/" onClick={closeMobileMenu}>
-          JobProof
-        </NavLink>
+    <header className="jp-navbar-shell">
+      <nav className="jp-navbar">
+        <Link to="/" className="jp-brand" onClick={() => setIsMenuOpen(false)}>
+          <span className="jp-brand-mark">JP</span>
+
+          <span className="jp-brand-text">
+            <strong>JobProof</strong>
+            <small>Field reports</small>
+          </span>
+        </Link>
 
         <button
-          className="navbar-toggler"
           type="button"
-          data-bs-toggle="collapse"
-          data-bs-target="#jobproofNavbar"
-          aria-controls="jobproofNavbar"
-          aria-expanded="false"
-          aria-label="Toggle navigation"
+          className={isMenuOpen ? "jp-menu-toggle open" : "jp-menu-toggle"}
+          onClick={() => setIsMenuOpen((currentValue) => !currentValue)}
+          aria-label="Toggle navigation menu"
+          aria-expanded={isMenuOpen}
         >
-          <span className="navbar-toggler-icon"></span>
+          <span />
+          <span />
+          <span />
         </button>
 
-        <div className="collapse navbar-collapse" id="jobproofNavbar">
-          {user ? (
-            <>
-              <ul className="navbar-nav me-auto mb-2 mb-lg-0">
-                <li className="nav-item">
-                  <NavLink
-                    to="/"
-                    className={getNavLinkClass}
-                    onClick={closeMobileMenu}
-                  >
-                    Dashboard
-                  </NavLink>
-                </li>
+        <div className={isMenuOpen ? "jp-nav-panel open" : "jp-nav-panel"}>
+          <div className="jp-nav-links">
+            {isAuthenticated ? (
+              <>
+                <NavLink to="/" className={getNavLinkClass} end>
+                  Dashboard
+                </NavLink>
 
-                {canManageTeam && (
-                  <li className="nav-item">
-                    <NavLink
-                      to="/team"
-                      className={getNavLinkClass}
-                      onClick={closeMobileMenu}
-                    >
-                      Team
-                    </NavLink>
-                  </li>
-                )}
+                <NavLink to="/reports" className={getNavLinkClass}>
+                  Reports
+                </NavLink>
 
-                {canManageClients && (
-                  <li className="nav-item">
-                    <NavLink
-                      to="/clients"
-                      className={getNavLinkClass}
-                      onClick={closeMobileMenu}
-                    >
+                <NavLink to="/create-report" className={getNavLinkClass}>
+                  Create Report
+                </NavLink>
+
+                {canManageWorkspace && (
+                  <>
+                    <NavLink to="/clients" className={getNavLinkClass}>
                       Clients
                     </NavLink>
-                  </li>
-                )}
 
-                <li className="nav-item">
-                  <NavLink
-                    to="/reports"
-                    className={getNavLinkClass}
-                    onClick={closeMobileMenu}
-                  >
-                    Reports
-                  </NavLink>
-                </li>
+                    <NavLink to="/team" className={getNavLinkClass}>
+                      Team
+                    </NavLink>
 
-                <li className="nav-item">
-                  <NavLink
-                    to="/create-report"
-                    className={getNavLinkClass}
-                    onClick={closeMobileMenu}
-                  >
-                    Create Report
-                  </NavLink>
-                </li>
-
-                {(isAdmin || isSupervisor || isWorker) && (
-                  <li className="nav-item d-lg-none">
-                    <NavLink
-                      to="/business-profile"
-                      className={getNavLinkClass}
-                      onClick={closeMobileMenu}
-                    >
+                    <NavLink to="/business-profile" className={getNavLinkClass}>
                       Business Profile
                     </NavLink>
-                  </li>
+                  </>
                 )}
-              </ul>
+              </>
+            ) : (
+              <>
+                <NavLink to="/" className={getNavLinkClass} end>
+                  Home
+                </NavLink>
 
-              <div className="d-flex flex-column flex-lg-row align-items-lg-center gap-2">
-                <div className="navbar-user-summary text-lg-end">
-                  <span className="navbar-user-name">
-                    {displayName || user.email}
-                  </span>
+                <NavLink to="/login" className={getNavLinkClass}>
+                  Log in
+                </NavLink>
 
-                  <small className="navbar-user-role">
-                    {profile?.role || "user"}
-                  </small>
+                <NavLink to="/register" className={getNavLinkClass}>
+                  Register
+                </NavLink>
+              </>
+            )}
+          </div>
+
+          {isAuthenticated ? (
+            <div className="jp-user-area">
+              <div className="jp-user-card">
+                <div className="jp-user-avatar">{getInitials(userName)}</div>
+
+                <div className="jp-user-meta">
+                  <strong>{userName}</strong>
+                  {userEmail && <small>{userEmail}</small>}
                 </div>
 
-                <NavLink
-                  to="/business-profile"
-                  className="btn btn-sm btn-outline-primary d-none d-lg-inline-flex"
-                  onClick={closeMobileMenu}
-                >
-                  Business Profile
-                </NavLink>
-
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline-danger"
-                  onClick={handleLogout}
-                >
-                  Logout
-                </button>
+                <span className={`jp-role-badge ${role || "user"}`}>
+                  {roleLabel}
+                </span>
               </div>
-            </>
+
+              <button
+                type="button"
+                className="btn btn-outline-danger jp-logout-btn"
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+              >
+                {isLoggingOut ? "Logging out..." : "Log out"}
+              </button>
+            </div>
           ) : (
-            <>
-              <ul className="navbar-nav me-auto mb-2 mb-lg-0">
-                <li className="nav-item">
-                  <NavLink
-                    to="/"
-                    className={getNavLinkClass}
-                    onClick={closeMobileMenu}
-                  >
-                    Home
-                  </NavLink>
-                </li>
-              </ul>
+            <div className="jp-auth-actions">
+              <Link to="/login" className="btn btn-outline-primary">
+                Log in
+              </Link>
 
-              <div className="d-flex gap-2">
-                <NavLink
-                  to="/login"
-                  className="btn btn-sm btn-outline-primary"
-                  onClick={closeMobileMenu}
-                >
-                  Login
-                </NavLink>
-
-                <NavLink
-                  to="/register"
-                  className="btn btn-sm btn-primary"
-                  onClick={closeMobileMenu}
-                >
-                  Create Account
-                </NavLink>
-              </div>
-            </>
+              <Link to="/register" className="btn btn-primary">
+                Get started
+              </Link>
+            </div>
           )}
         </div>
-      </div>
-    </nav>
+      </nav>
+    </header>
   );
 };
 
