@@ -9,6 +9,28 @@ const formatStatusLabel = (status) => {
   return status.charAt(0).toUpperCase() + status.slice(1);
 };
 
+const formatRoleLabel = (role) => {
+  if (!role) return "Worker";
+
+  const normalizedRole = String(role).trim().toLowerCase();
+
+  const roleMap = {
+    lead: "Lead",
+    worker: "Worker",
+    supervisor: "Supervisor",
+    admin: "Admin",
+    helper: "Helper",
+  };
+
+  if (roleMap[normalizedRole]) {
+    return roleMap[normalizedRole];
+  }
+
+  return normalizedRole
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+};
+
 const hasInternalNotes = (reportData) => {
   return Boolean(
     reportData?.internalNotes ||
@@ -41,6 +63,50 @@ const ReportPreview = ({ reportData, showInternalNotes = false }) => {
               <img src={photo} alt={`${title} ${index + 1}`} />
             </div>
           ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderTeamInvolved = () => {
+    if (!reportData.teamInvolved || reportData.teamInvolved.length === 0) {
+      return null;
+    }
+
+    return (
+      <div className="report-preview-section">
+        <h4>Team involved</h4>
+
+        <div className="report-preview-team-list-fixed">
+          {reportData.teamInvolved.map((member, index) => {
+            const memberName =
+              member.fullName ||
+              member.full_name ||
+              member.name ||
+              member.email ||
+              `Team member ${index + 1}`;
+
+            const memberRole =
+              member.roleOnJob ||
+              member.role_on_job ||
+              member.role ||
+              "worker";
+
+            return (
+              <div
+                className="report-preview-team-member-fixed"
+                key={member.id || `${memberName}-${index}`}
+              >
+                <div className="report-preview-team-member-name-fixed">
+                  {memberName}
+                </div>
+
+                <div className="report-preview-team-member-role-fixed">
+                  {formatRoleLabel(memberRole)}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -177,20 +243,7 @@ const ReportPreview = ({ reportData, showInternalNotes = false }) => {
         </div>
       )}
 
-      {reportData.teamInvolved?.length > 0 && (
-        <div className="report-preview-section">
-          <h4>Team involved</h4>
-
-          <div className="report-preview-team-list">
-            {reportData.teamInvolved.map((member) => (
-              <div className="report-preview-team-member" key={member.id}>
-                <strong>{member.fullName}</strong>
-                <span>{member.roleOnJob || member.role || "worker"}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {renderTeamInvolved()}
 
       <div className="report-preview-section">
         <h4>Work notes</h4>

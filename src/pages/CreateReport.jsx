@@ -1156,6 +1156,12 @@ const CreateReport = () => {
           {message.text}
         </div>
       )}
+      
+      {message && (
+  <div className={`alert alert-${message.type} mobile-save-message d-lg-none`} role="alert">
+    {message.text}
+  </div>
+)}
 
       {workerCannotEditCompletedReport && (
         <div className="alert alert-warning" role="alert">

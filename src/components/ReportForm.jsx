@@ -1,5 +1,94 @@
 import { calculateTotalHours } from "../utils/calculateTotalHours";
 
+const MAX_PHOTOS_PER_GROUP = 6;
+const MAX_FILE_SIZE_MB = 10;
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+const MAX_IMAGE_WIDTH_OR_HEIGHT = 1600;
+const JPEG_QUALITY = 0.75;
+
+const resizeImageFile = (file) => {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith("image/")) {
+      reject(new Error("Only image files are allowed."));
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      reject(
+        new Error(
+          `${file.name} is too large. Maximum size is ${MAX_FILE_SIZE_MB} MB.`
+        )
+      );
+      return;
+    }
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const image = new Image();
+
+      image.onload = () => {
+        const canvas = document.createElement("canvas");
+
+        let { width, height } = image;
+
+        if (width > height && width > MAX_IMAGE_WIDTH_OR_HEIGHT) {
+          height = Math.round((height * MAX_IMAGE_WIDTH_OR_HEIGHT) / width);
+          width = MAX_IMAGE_WIDTH_OR_HEIGHT;
+        } else if (height > MAX_IMAGE_WIDTH_OR_HEIGHT) {
+          width = Math.round((width * MAX_IMAGE_WIDTH_OR_HEIGHT) / height);
+          height = MAX_IMAGE_WIDTH_OR_HEIGHT;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const context = canvas.getContext("2d");
+        context.drawImage(image, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              reject(new Error("There was an error compressing this image."));
+              return;
+            }
+
+            const safeFileName = file.name
+              ? file.name.replace(/\.[^/.]+$/, ".jpg")
+              : `jobproof-photo-${Date.now()}.jpg`;
+
+            const compressedFile = new File([blob], safeFileName, {
+              type: "image/jpeg",
+              lastModified: Date.now(),
+            });
+
+            const previewUrl = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
+
+            resolve({
+              file: compressedFile,
+              previewUrl,
+            });
+          },
+          "image/jpeg",
+          JPEG_QUALITY
+        );
+      };
+
+      image.onerror = () => {
+        reject(new Error("There was an error processing this image."));
+      };
+
+      image.src = reader.result;
+    };
+
+    reader.onerror = () => {
+      reject(new Error("There was an error reading this image."));
+    };
+
+    reader.readAsDataURL(file);
+  });
+};
+
 const ReportForm = ({
   reportData,
   setReportData,
@@ -60,58 +149,70 @@ const ReportForm = ({
     });
   };
 
-  const readFileAsDataUrl = (file) => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-
-      reader.onload = () => {
-        resolve({
-          file,
-          previewUrl: reader.result,
-        });
-      };
-
-      reader.readAsDataURL(file);
-    });
-  };
-
   const handlePhotoUpload = async (event, photoType) => {
-    const files = Array.from(event.target.files);
+    const selectedFiles = Array.from(event.target.files || []);
 
-    if (files.length === 0) return;
+    if (selectedFiles.length === 0) return;
 
-    const uploadedPhotos = await Promise.all(files.map(readFileAsDataUrl));
-    const previewUrls = uploadedPhotos.map((photo) => photo.previewUrl);
+    const currentPhotos = reportData[photoType] || [];
+    const availableSlots = MAX_PHOTOS_PER_GROUP - currentPhotos.length;
 
-    setReportData({
-      ...reportData,
-      [photoType]: [...(reportData[photoType] || []), ...previewUrls],
-    });
-
-    if (setPhotoFiles) {
-      setPhotoFiles((currentPhotoFiles) => ({
-        ...currentPhotoFiles,
-        [photoType]: [
-          ...(currentPhotoFiles[photoType] || []),
-          ...uploadedPhotos,
-        ],
-      }));
+    if (availableSlots <= 0) {
+      alert(`You can upload a maximum of ${MAX_PHOTOS_PER_GROUP} photos.`);
+      event.target.value = "";
+      return;
     }
 
-    event.target.value = "";
+    const filesToProcess = selectedFiles.slice(0, availableSlots);
+
+    if (selectedFiles.length > availableSlots) {
+      alert(
+        `Only ${availableSlots} more photo${
+          availableSlots === 1 ? "" : "s"
+        } can be added. Maximum ${MAX_PHOTOS_PER_GROUP} photos allowed.`
+      );
+    }
+
+    try {
+      const processedPhotos = await Promise.all(
+        filesToProcess.map((file) => resizeImageFile(file))
+      );
+
+      const previewUrls = processedPhotos.map((photo) => photo.previewUrl);
+
+      setReportData((currentReportData) => ({
+        ...currentReportData,
+        [photoType]: [...(currentReportData[photoType] || []), ...previewUrls],
+      }));
+
+      if (setPhotoFiles) {
+        setPhotoFiles((currentPhotoFiles) => ({
+          ...currentPhotoFiles,
+          [photoType]: [
+            ...(currentPhotoFiles[photoType] || []),
+            ...processedPhotos,
+          ],
+        }));
+      }
+    } catch (error) {
+      console.error("Photo upload error:", error);
+      alert(error.message || "There was an error uploading this photo.");
+    } finally {
+      event.target.value = "";
+    }
   };
 
   const handleRemovePhoto = (photoType, photoIndex) => {
-    const photoToRemove = reportData[photoType][photoIndex];
+    const photoToRemove = reportData[photoType]?.[photoIndex];
 
-    const updatedPhotos = reportData[photoType].filter(
+    const updatedPhotos = (reportData[photoType] || []).filter(
       (_, index) => index !== photoIndex
     );
 
-    setReportData({
-      ...reportData,
+    setReportData((currentReportData) => ({
+      ...currentReportData,
       [photoType]: updatedPhotos,
-    });
+    }));
 
     if (setPhotoFiles) {
       setPhotoFiles((currentPhotoFiles) => ({
@@ -271,16 +372,27 @@ const ReportForm = ({
 
   const renderPhotoUploader = (title, photoType, inputId) => {
     const photos = reportData[photoType] || [];
+    const hasReachedLimit = photos.length >= MAX_PHOTOS_PER_GROUP;
 
     return (
       <div className="mb-4">
-        <label className="form-label">{title}</label>
+        <div className="d-flex justify-content-between align-items-center gap-2 mb-2">
+          <label className="form-label mb-0">{title}</label>
+
+          <small className="text-muted">
+            {photos.length}/{MAX_PHOTOS_PER_GROUP} photos
+          </small>
+        </div>
 
         <div className="photo-action-grid">
           <div>
             <label
               htmlFor={`${inputId}Camera`}
-              className="btn btn-primary w-100"
+              className={
+                hasReachedLimit
+                  ? "btn btn-primary w-100 disabled"
+                  : "btn btn-primary w-100"
+              }
             >
               Take photo
             </label>
@@ -291,6 +403,7 @@ const ReportForm = ({
               className="visually-hidden"
               accept="image/*"
               capture="environment"
+              disabled={hasReachedLimit}
               onChange={(event) => handlePhotoUpload(event, photoType)}
             />
           </div>
@@ -298,7 +411,11 @@ const ReportForm = ({
           <div>
             <label
               htmlFor={`${inputId}Gallery`}
-              className="btn btn-outline-primary w-100"
+              className={
+                hasReachedLimit
+                  ? "btn btn-outline-primary w-100 disabled"
+                  : "btn btn-outline-primary w-100"
+              }
             >
               Upload from gallery
             </label>
@@ -309,37 +426,36 @@ const ReportForm = ({
               className="visually-hidden"
               accept="image/*"
               multiple
+              disabled={hasReachedLimit}
               onChange={(event) => handlePhotoUpload(event, photoType)}
             />
           </div>
         </div>
 
         <small className="text-muted d-block mt-2">
-          On mobile, Take photo opens the camera. You can add more photos one by
-          one.
+          Max {MAX_FILE_SIZE_MB} MB per photo. Images are automatically resized
+          before saving.
         </small>
 
         {photos.length === 0 ? (
           <p className="text-muted small mt-2 mb-0">No photos uploaded yet.</p>
         ) : (
-          <div className="row g-2 mt-2">
+          <div className="photo-preview-grid mt-3">
             {photos.map((photo, index) => (
-              <div className="col-6" key={`${photoType}-${index}-${photo}`}>
-                <div className="border rounded p-2 bg-light">
-                  <img
-                    src={photo}
-                    alt={`${title} ${index + 1}`}
-                    className="img-fluid rounded mb-2 report-photo"
-                  />
+              <div className="photo-preview-card" key={`${photoType}-${index}`}>
+                <img
+                  src={photo}
+                  alt={`${title} ${index + 1}`}
+                  className="photo-preview-img"
+                />
 
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline-danger w-100"
-                    onClick={() => handleRemovePhoto(photoType, index)}
-                  >
-                    Remove
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-danger photo-remove-btn"
+                  onClick={() => handleRemovePhoto(photoType, index)}
+                >
+                  Remove
+                </button>
               </div>
             ))}
           </div>
