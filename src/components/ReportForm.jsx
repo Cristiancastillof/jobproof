@@ -1,11 +1,10 @@
-import { useRef } from "react";
 import { calculateTotalHours } from "../utils/calculateTotalHours";
 
 const MAX_PHOTOS_PER_GROUP = 6;
-const MAX_FILE_SIZE_MB = 10;
-const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
-const MAX_IMAGE_WIDTH_OR_HEIGHT = 1600;
-const JPEG_QUALITY = 0.75;
+const MAX_ORIGINAL_FILE_SIZE_MB = 25;
+const MAX_ORIGINAL_FILE_SIZE_BYTES = MAX_ORIGINAL_FILE_SIZE_MB * 1024 * 1024;
+const MAX_IMAGE_WIDTH_OR_HEIGHT = 1400;
+const JPEG_QUALITY = 0.72;
 
 const PhotoInputButton = ({
   inputId,
@@ -16,45 +15,66 @@ const PhotoInputButton = ({
   multiple = false,
   onChange,
 }) => {
-  const inputRef = useRef(null);
-
   return (
-    <div className="jp-photo-input-wrapper">
-      <button
-        type="button"
-        className={`btn btn-${variant} w-100 jp-photo-input-button`}
-        disabled={disabled}
-        onClick={() => inputRef.current?.click()}
+    <div className="w-100">
+      <label
+        htmlFor={inputId}
+        className={
+          disabled
+            ? `btn btn-${variant} w-100 disabled`
+            : `btn btn-${variant} w-100`
+        }
+        style={{
+          minHeight: "48px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontWeight: 800,
+          cursor: disabled ? "not-allowed" : "pointer",
+        }}
       >
         {label}
-      </button>
+      </label>
 
       <input
-        ref={inputRef}
         id={inputId}
         type="file"
         accept="image/*"
-        capture={capture}
+        capture={capture || undefined}
         multiple={multiple}
         disabled={disabled}
-        className="jp-photo-real-input"
         onChange={onChange}
+        style={{
+          display: "none",
+        }}
       />
     </div>
   );
 };
 
+const isProbablyImageFile = (file) => {
+  if (!file) return false;
+
+  if (file.type && file.type.startsWith("image/")) {
+    return true;
+  }
+
+  const fileName = file.name || "";
+
+  return /\.(jpg|jpeg|png|webp|heic|heif)$/i.test(fileName);
+};
+
 const resizeImageFile = (file) => {
   return new Promise((resolve, reject) => {
-    if (!file.type.startsWith("image/")) {
+    if (!isProbablyImageFile(file)) {
       reject(new Error("Only image files are allowed."));
       return;
     }
 
-    if (file.size > MAX_FILE_SIZE_BYTES) {
+    if (file.size > MAX_ORIGINAL_FILE_SIZE_BYTES) {
       reject(
         new Error(
-          `${file.name} is too large. Maximum size is ${MAX_FILE_SIZE_MB} MB.`
+          `${file.name || "This photo"} is too large. Maximum original size is ${MAX_ORIGINAL_FILE_SIZE_MB} MB.`
         )
       );
       return;
@@ -97,11 +117,12 @@ const resizeImageFile = (file) => {
               return;
             }
 
-            const safeFileName = file.name
-              ? file.name.replace(/\.[^/.]+$/, ".jpg")
-              : `jobproof-photo-${Date.now()}.jpg`;
+            const baseName =
+              file.name && file.name.trim() !== ""
+                ? file.name.replace(/\.[^/.]+$/, "")
+                : `jobproof-photo-${Date.now()}`;
 
-            const compressedFile = new File([blob], safeFileName, {
+            const compressedFile = new File([blob], `${baseName}.jpg`, {
               type: "image/jpeg",
               lastModified: Date.now(),
             });
@@ -119,7 +140,11 @@ const resizeImageFile = (file) => {
       };
 
       image.onerror = () => {
-        reject(new Error("There was an error processing this image."));
+        reject(
+          new Error(
+            "This image format could not be processed. Please try another photo or upload it from the gallery."
+          )
+        );
       };
 
       image.src = reader.result;
@@ -196,7 +221,10 @@ const ReportForm = ({
   const handlePhotoUpload = async (event, photoType) => {
     const selectedFiles = Array.from(event.target.files || []);
 
-    if (selectedFiles.length === 0) return;
+    if (selectedFiles.length === 0) {
+      event.target.value = "";
+      return;
+    }
 
     const currentPhotos = reportData[photoType] || [];
     const availableSlots = MAX_PHOTOS_PER_GROUP - currentPhotos.length;
@@ -428,7 +456,14 @@ const ReportForm = ({
           </small>
         </div>
 
-        <div className="photo-action-grid">
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr",
+            gap: "12px",
+            width: "100%",
+          }}
+        >
           <PhotoInputButton
             inputId={`${inputId}Camera`}
             label="Take photo"
@@ -449,20 +484,28 @@ const ReportForm = ({
         </div>
 
         <small className="text-muted d-block mt-2">
-          Max {MAX_FILE_SIZE_MB} MB per photo. Images are automatically resized
-          before saving.
+          Max {MAX_ORIGINAL_FILE_SIZE_MB} MB per original photo. Images are
+          automatically resized before saving.
         </small>
 
         {photos.length === 0 ? (
           <p className="text-muted small mt-2 mb-0">No photos uploaded yet.</p>
         ) : (
-          <div className="photo-preview-grid mt-3">
+          <div
+            className="mt-3"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr",
+              gap: "14px",
+              width: "100%",
+            }}
+          >
             {photos.map((photo, index) => (
               <div
-                className="photo-preview-card"
                 key={`${photoType}-${index}`}
                 style={{
                   width: "100%",
+                  maxWidth: "100%",
                   overflow: "hidden",
                   borderRadius: "18px",
                   background: "#020617",
@@ -472,10 +515,10 @@ const ReportForm = ({
                 <img
                   src={photo}
                   alt={`${title} ${index + 1}`}
-                  className="photo-preview-img"
                   style={{
                     display: "block",
                     width: "100%",
+                    maxWidth: "100%",
                     height: "260px",
                     objectFit: "contain",
                     objectPosition: "center",
