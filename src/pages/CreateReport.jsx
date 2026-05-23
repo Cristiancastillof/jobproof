@@ -115,6 +115,34 @@ const buildClientAddress = (client) => {
     .join(", ");
 };
 
+const applyClientToReportData = (baseReportData, selectedClient) => {
+  if (!selectedClient) return baseReportData;
+
+  const addressSnapshot = buildClientAddress(selectedClient);
+
+  const clientName =
+    selectedClient.client_display_name ||
+    selectedClient.contact_person ||
+    selectedClient.company_name ||
+    "";
+
+  return {
+    ...baseReportData,
+    clientId: selectedClient.id,
+    clientDisplayName: selectedClient.client_display_name || "",
+    clientCompanyName: selectedClient.company_name || "",
+    clientContactPerson: selectedClient.contact_person || "",
+    clientEmail: selectedClient.email || "",
+    clientPhone: selectedClient.phone || "",
+    clientAddressSnapshot: addressSnapshot,
+    clientAccessNotes: selectedClient.access_notes || "",
+    clientName,
+    jobAddress: addressSnapshot || baseReportData.jobAddress,
+    serviceType:
+      selectedClient.default_service_type || baseReportData.serviceType,
+  };
+};
+
 const mapSupabaseReportToForm = ({
   report,
   company,
@@ -316,7 +344,6 @@ const CreateReport = () => {
   const [loadingReport, setLoadingReport] = useState(true);
   const [savingReport, setSavingReport] = useState(false);
   const [message, setMessage] = useState(null);
-  const [appliedClientIdFromUrl, setAppliedClientIdFromUrl] = useState("");
 
   const isWorker = profile?.role === "worker";
   const isCompletedReport = reportData?.status === "completed";
@@ -367,7 +394,10 @@ const CreateReport = () => {
       throw error;
     }
 
-    setClients(data || []);
+    const loadedClients = data || [];
+    setClients(loadedClients);
+
+    return loadedClients;
   };
 
   useEffect(() => {
@@ -421,7 +451,7 @@ const CreateReport = () => {
         const loadedMembers = membersData || [];
         setTeamMembers(loadedMembers);
 
-        await loadActiveClients();
+        const loadedClients = await loadActiveClients();
 
         if (isEditMode) {
           let reportQuery = supabase
@@ -526,7 +556,7 @@ const CreateReport = () => {
               roleOnJob: member.id === user.id ? "lead" : "worker",
             }));
 
-          setReportData({
+          const baseNewReport = {
             ...createEmptyReport(),
             reportNumber,
             businessName: companyData.business_name || "",
@@ -538,7 +568,31 @@ const CreateReport = () => {
             teamInvolved: initialTeamInvolved,
             status: "pending",
             jobDate: getTodayDate(),
-          });
+          };
+
+          const selectedClientFromUrl = clientIdFromUrl
+            ? loadedClients.find((client) => client.id === clientIdFromUrl)
+            : null;
+
+          const reportWithClient = selectedClientFromUrl
+            ? applyClientToReportData(baseNewReport, selectedClientFromUrl)
+            : baseNewReport;
+
+          setReportData(reportWithClient);
+
+          if (clientIdFromUrl && !selectedClientFromUrl) {
+            setMessage({
+              type: "warning",
+              text: "The selected client could not be found or is no longer active.",
+            });
+          }
+
+          if (selectedClientFromUrl) {
+            setMessage({
+              type: "success",
+              text: `${selectedClientFromUrl.client_display_name} was loaded into this report.`,
+            });
+          }
         }
       } catch (error) {
         console.error("Error loading report data:", error);
@@ -600,6 +654,9 @@ const CreateReport = () => {
         clientPhone: "",
         clientAddressSnapshot: "",
         clientAccessNotes: "",
+        clientName: "",
+        jobAddress: "",
+        serviceType: "",
       }));
 
       return;
@@ -609,70 +666,10 @@ const CreateReport = () => {
 
     if (!selectedClient) return;
 
-    const addressSnapshot = buildClientAddress(selectedClient);
-    const clientName =
-      selectedClient.client_display_name ||
-      selectedClient.contact_person ||
-      selectedClient.company_name ||
-      "";
-
-    setReportData((currentReportData) => ({
-      ...currentReportData,
-      clientId: selectedClient.id,
-      clientDisplayName: selectedClient.client_display_name || "",
-      clientCompanyName: selectedClient.company_name || "",
-      clientContactPerson: selectedClient.contact_person || "",
-      clientEmail: selectedClient.email || "",
-      clientPhone: selectedClient.phone || "",
-      clientAddressSnapshot: addressSnapshot,
-      clientAccessNotes: selectedClient.access_notes || "",
-      clientName,
-      jobAddress: addressSnapshot || currentReportData.jobAddress,
-      serviceType:
-        selectedClient.default_service_type || currentReportData.serviceType,
-    }));
-  };
-
-  useEffect(() => {
-    if (isEditMode) return;
-    if (!clientIdFromUrl) return;
-    if (clients.length === 0) return;
-    if (appliedClientIdFromUrl === clientIdFromUrl) return;
-
-    const selectedClient = clients.find(
-      (client) => client.id === clientIdFromUrl
+    setReportData((currentReportData) =>
+      applyClientToReportData(currentReportData, selectedClient)
     );
-
-    const nextSearchParams = new URLSearchParams(searchParams);
-    nextSearchParams.delete("clientId");
-
-    if (!selectedClient) {
-      setMessage({
-        type: "warning",
-        text: "The selected client could not be found or is no longer active.",
-      });
-
-      setSearchParams(nextSearchParams, { replace: true });
-      return;
-    }
-
-    handleSelectClient(clientIdFromUrl);
-    setAppliedClientIdFromUrl(clientIdFromUrl);
-
-    setMessage({
-      type: "success",
-      text: `${selectedClient.client_display_name} was loaded into this report.`,
-    });
-
-    setSearchParams(nextSearchParams, { replace: true });
-  }, [
-    isEditMode,
-    clientIdFromUrl,
-    clients,
-    appliedClientIdFromUrl,
-    searchParams,
-    setSearchParams,
-  ]);
+  };
 
   const deleteRemovedSupabasePhotos = async (reportId, currentReportData) => {
     const { data: savedPhotos, error } = await supabase
@@ -1084,7 +1081,6 @@ const CreateReport = () => {
     });
 
     setPhotoFiles(createEmptyPhotoFiles());
-    setAppliedClientIdFromUrl("");
 
     const nextSearchParams = new URLSearchParams(searchParams);
     nextSearchParams.delete("clientId");
