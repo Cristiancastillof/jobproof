@@ -9,52 +9,40 @@ const JPEG_QUALITY = 0.72;
 const PhotoInputButton = ({
   inputId,
   label,
-  variant = "primary",
   disabled = false,
-  capture,
-  multiple = false,
+  multiple = true,
   onChange,
 }) => {
   return (
-    <div
-      style={{
-        position: "relative",
-        width: "100%",
-        minHeight: "48px",
-      }}
-    >
-      <button
-        type="button"
-        className={`btn btn-${variant} w-100`}
-        disabled={disabled}
+    <div className="w-100">
+      <label
+        htmlFor={inputId}
+        className={
+          disabled
+            ? "btn btn-primary w-100 disabled"
+            : "btn btn-primary w-100"
+        }
         style={{
           minHeight: "48px",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           fontWeight: 800,
-          pointerEvents: "none",
+          cursor: disabled ? "not-allowed" : "pointer",
         }}
       >
         {label}
-      </button>
+      </label>
 
       <input
         id={inputId}
         type="file"
         accept="image/*"
-        capture={capture || undefined}
         multiple={multiple}
         disabled={disabled}
         onChange={onChange}
         style={{
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-          opacity: 0.001,
-          zIndex: 5,
-          cursor: "pointer",
+          display: "none",
         }}
       />
     </div>
@@ -467,36 +455,18 @@ const ReportForm = ({
           </small>
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr",
-            gap: "12px",
-            width: "100%",
-          }}
-        >
-          <PhotoInputButton
-            inputId={`${inputId}Camera`}
-            label="Take photo"
-            variant="primary"
-            disabled={hasReachedLimit}
-            capture="environment"
-            onChange={(event) => handlePhotoUpload(event, photoType)}
-          />
-
-          <PhotoInputButton
-            inputId={`${inputId}Gallery`}
-            label="Upload from gallery"
-            variant="outline-primary"
-            disabled={hasReachedLimit}
-            multiple
-            onChange={(event) => handlePhotoUpload(event, photoType)}
-          />
-        </div>
+        <PhotoInputButton
+          inputId={`${inputId}AddPhoto`}
+          label="Add photo"
+          disabled={hasReachedLimit}
+          multiple
+          onChange={(event) => handlePhotoUpload(event, photoType)}
+        />
 
         <small className="text-muted d-block mt-2">
-          Max {MAX_ORIGINAL_FILE_SIZE_MB} MB per original photo. Images are
-          automatically resized before saving.
+          Tap Add photo and choose Camera or Gallery. Max{" "}
+          {MAX_ORIGINAL_FILE_SIZE_MB} MB per original photo. Images are resized
+          before saving.
         </small>
 
         {photos.length === 0 ? (
