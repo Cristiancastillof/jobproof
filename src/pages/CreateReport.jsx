@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import ReportForm from "../components/ReportForm";
 import ReportPreview from "../components/ReportPreview";
 import { useAuth } from "../context/AuthContext";
@@ -299,7 +299,10 @@ const getRoleOnJob = (member, creatorId) => {
 const CreateReport = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, profile, displayName, profileLoading } = useAuth();
+
+  const clientIdFromUrl = searchParams.get("clientId");
 
   const isEditMode = Boolean(id);
   const statusOptions = getStatusOptionsByRole(profile?.role);
@@ -313,6 +316,7 @@ const CreateReport = () => {
   const [loadingReport, setLoadingReport] = useState(true);
   const [savingReport, setSavingReport] = useState(false);
   const [message, setMessage] = useState(null);
+  const [appliedClientIdFromUrl, setAppliedClientIdFromUrl] = useState("");
 
   const isWorker = profile?.role === "worker";
   const isCompletedReport = reportData?.status === "completed";
@@ -628,6 +632,47 @@ const CreateReport = () => {
         selectedClient.default_service_type || currentReportData.serviceType,
     }));
   };
+
+  useEffect(() => {
+    if (isEditMode) return;
+    if (!clientIdFromUrl) return;
+    if (clients.length === 0) return;
+    if (appliedClientIdFromUrl === clientIdFromUrl) return;
+
+    const selectedClient = clients.find(
+      (client) => client.id === clientIdFromUrl
+    );
+
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.delete("clientId");
+
+    if (!selectedClient) {
+      setMessage({
+        type: "warning",
+        text: "The selected client could not be found or is no longer active.",
+      });
+
+      setSearchParams(nextSearchParams, { replace: true });
+      return;
+    }
+
+    handleSelectClient(clientIdFromUrl);
+    setAppliedClientIdFromUrl(clientIdFromUrl);
+
+    setMessage({
+      type: "success",
+      text: `${selectedClient.client_display_name} was loaded into this report.`,
+    });
+
+    setSearchParams(nextSearchParams, { replace: true });
+  }, [
+    isEditMode,
+    clientIdFromUrl,
+    clients,
+    appliedClientIdFromUrl,
+    searchParams,
+    setSearchParams,
+  ]);
 
   const deleteRemovedSupabasePhotos = async (reportId, currentReportData) => {
     const { data: savedPhotos, error } = await supabase
@@ -1039,6 +1084,12 @@ const CreateReport = () => {
     });
 
     setPhotoFiles(createEmptyPhotoFiles());
+    setAppliedClientIdFromUrl("");
+
+    const nextSearchParams = new URLSearchParams(searchParams);
+    nextSearchParams.delete("clientId");
+    setSearchParams(nextSearchParams, { replace: true });
+
     setMessage(null);
   };
 
