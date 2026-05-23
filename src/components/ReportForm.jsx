@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { calculateTotalHours } from "../utils/calculateTotalHours";
 
 const MAX_PHOTOS_PER_GROUP = 6;
@@ -19,8 +20,8 @@ const PhotoInputButton = ({
         htmlFor={inputId}
         className={
           disabled
-            ? "btn btn-primary w-100 disabled"
-            : "btn btn-primary w-100"
+            ? "btn btn-outline-primary w-100 disabled"
+            : "btn btn-outline-primary w-100"
         }
         style={{
           minHeight: "48px",
@@ -41,9 +42,7 @@ const PhotoInputButton = ({
         multiple={multiple}
         disabled={disabled}
         onChange={onChange}
-        style={{
-          display: "none",
-        }}
+        style={{ display: "none" }}
       />
     </div>
   );
@@ -57,7 +56,6 @@ const isProbablyImageFile = (file) => {
   }
 
   const fileName = file.name || "";
-
   return /\.(jpg|jpeg|png|webp|heic|heif)$/i.test(fileName);
 };
 
@@ -157,6 +155,13 @@ const resizeImageFile = (file) => {
   });
 };
 
+const createFileFromCameraBlob = (blob) => {
+  return new File([blob], `jobproof-camera-photo-${Date.now()}.jpg`, {
+    type: "image/jpeg",
+    lastModified: Date.now(),
+  });
+};
+
 const ReportForm = ({
   reportData,
   setReportData,
@@ -169,9 +174,167 @@ const ReportForm = ({
   clients = [],
   onSelectClient,
 }) => {
+  const videoRef = useRef(null);
+  const cameraStreamRef = useRef(null);
+
+  const [activeCameraPhotoType, setActiveCameraPhotoType] = useState(null);
+  const [cameraError, setCameraError] = useState("");
+  const [isCameraLoading, setIsCameraLoading] = useState(false);
+
   const totalHours =
     reportData.totalHours ||
     calculateTotalHours(reportData.startingHour, reportData.finishHour);
+
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, []);
+
+  const stopCamera = () => {
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach((track) => track.stop());
+      cameraStreamRef.current = null;
+    }
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+
+    setActiveCameraPhotoType(null);
+    setIsCameraLoading(false);
+  };
+
+  const addProcessedPhotosToState = ({ processedPhotos, photoType }) => {
+    const previewUrls = processedPhotos.map((photo) => photo.previewUrl);
+
+    setReportData((currentReportData) => ({
+      ...currentReportData,
+      [photoType]: [...(currentReportData[photoType] || []), ...previewUrls],
+    }));
+
+    if (setPhotoFiles) {
+      setPhotoFiles((currentPhotoFiles) => ({
+        ...currentPhotoFiles,
+        [photoType]: [
+          ...(currentPhotoFiles[photoType] || []),
+          ...processedPhotos,
+        ],
+      }));
+    }
+  };
+
+  const startCamera = async (photoType) => {
+    const currentPhotos = reportData[photoType] || [];
+
+    if (currentPhotos.length >= MAX_PHOTOS_PER_GROUP) {
+      alert(`You can upload a maximum of ${MAX_PHOTOS_PER_GROUP} photos.`);
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError(
+        "Camera is not available in this browser. Please use Add photo instead."
+      );
+      return;
+    }
+
+    setCameraError("");
+    setIsCameraLoading(true);
+    setActiveCameraPhotoType(photoType);
+
+    try {
+      stopCamera();
+
+      setActiveCameraPhotoType(photoType);
+      setIsCameraLoading(true);
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      });
+
+      cameraStreamRef.current = stream;
+
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current
+            .play()
+            .catch(() => {
+              setCameraError("Could not start camera preview.");
+            });
+        }
+
+        setIsCameraLoading(false);
+      }, 100);
+    } catch (error) {
+      console.error("Camera error:", error);
+
+      setCameraError(
+        "Camera permission was denied or the camera could not be opened. Please use Add photo instead."
+      );
+
+      stopCamera();
+    }
+  };
+
+  const captureQuickPhoto = async () => {
+    if (!videoRef.current || !activeCameraPhotoType) {
+      setCameraError("Camera is not ready yet.");
+      return;
+    }
+
+    try {
+      const video = videoRef.current;
+      const canvas = document.createElement("canvas");
+
+      const width = video.videoWidth || 1280;
+      const height = video.videoHeight || 720;
+
+      canvas.width = width;
+      canvas.height = height;
+
+      const context = canvas.getContext("2d");
+
+      if (!context) {
+        setCameraError("Could not capture the photo.");
+        return;
+      }
+
+      context.drawImage(video, 0, 0, width, height);
+
+      canvas.toBlob(
+        async (blob) => {
+          if (!blob) {
+            setCameraError("Could not create the photo file.");
+            return;
+          }
+
+          const file = createFileFromCameraBlob(blob);
+          const processedPhoto = await resizeImageFile(file);
+
+          addProcessedPhotosToState({
+            processedPhotos: [processedPhoto],
+            photoType: activeCameraPhotoType,
+          });
+
+          stopCamera();
+        },
+        "image/jpeg",
+        JPEG_QUALITY
+      );
+    } catch (error) {
+      console.error("Capture photo error:", error);
+      setCameraError(
+        error.message || "There was an error capturing this photo."
+      );
+    }
+  };
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -249,22 +412,10 @@ const ReportForm = ({
         filesToProcess.map((file) => resizeImageFile(file))
       );
 
-      const previewUrls = processedPhotos.map((photo) => photo.previewUrl);
-
-      setReportData((currentReportData) => ({
-        ...currentReportData,
-        [photoType]: [...(currentReportData[photoType] || []), ...previewUrls],
-      }));
-
-      if (setPhotoFiles) {
-        setPhotoFiles((currentPhotoFiles) => ({
-          ...currentPhotoFiles,
-          [photoType]: [
-            ...(currentPhotoFiles[photoType] || []),
-            ...processedPhotos,
-          ],
-        }));
-      }
+      addProcessedPhotosToState({
+        processedPhotos,
+        photoType,
+      });
     } catch (error) {
       console.error("Photo upload error:", error);
       alert(error.message || "There was an error uploading this photo.");
@@ -302,6 +453,95 @@ const ReportForm = ({
   const selectedClient = clients.find(
     (client) => client.id === reportData.clientId
   );
+
+  const renderCameraPanel = (photoType) => {
+    if (activeCameraPhotoType !== photoType) return null;
+
+    return (
+      <div
+        className="mt-3"
+        style={{
+          borderRadius: "20px",
+          overflow: "hidden",
+          background: "#020617",
+          border: "1px solid rgba(15, 23, 42, 0.12)",
+        }}
+      >
+        <div
+          style={{
+            position: "relative",
+            width: "100%",
+            minHeight: "260px",
+            background: "#020617",
+          }}
+        >
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            style={{
+              width: "100%",
+              height: "320px",
+              objectFit: "cover",
+              display: "block",
+              background: "#020617",
+            }}
+          />
+
+          {isCameraLoading && (
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#ffffff",
+                background: "rgba(2, 6, 23, 0.65)",
+                fontWeight: 800,
+              }}
+            >
+              Opening camera...
+            </div>
+          )}
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "10px",
+            padding: "12px",
+            background: "#ffffff",
+          }}
+        >
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={captureQuickPhoto}
+            disabled={isCameraLoading}
+          >
+            Capture photo
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-outline-secondary"
+            onClick={stopCamera}
+          >
+            Close camera
+          </button>
+        </div>
+
+        {cameraError && (
+          <div className="alert alert-warning m-3" role="alert">
+            {cameraError}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const renderClientSelector = () => {
     return (
@@ -455,18 +695,41 @@ const ReportForm = ({
           </small>
         </div>
 
-        <PhotoInputButton
-          inputId={`${inputId}AddPhoto`}
-          label="Add photo"
-          disabled={hasReachedLimit}
-          multiple
-          onChange={(event) => handlePhotoUpload(event, photoType)}
-        />
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr",
+            gap: "10px",
+            width: "100%",
+          }}
+        >
+          <button
+            type="button"
+            className="btn btn-primary w-100"
+            disabled={hasReachedLimit}
+            onClick={() => startCamera(photoType)}
+            style={{
+              minHeight: "48px",
+              fontWeight: 800,
+            }}
+          >
+            Take quick photo
+          </button>
+
+          <PhotoInputButton
+            inputId={`${inputId}AddPhoto`}
+            label="Add from device"
+            disabled={hasReachedLimit}
+            multiple
+            onChange={(event) => handlePhotoUpload(event, photoType)}
+          />
+        </div>
+
+        {renderCameraPanel(photoType)}
 
         <small className="text-muted d-block mt-2">
-          Tap Add photo and choose Camera or Gallery. Max{" "}
-          {MAX_ORIGINAL_FILE_SIZE_MB} MB per original photo. Images are resized
-          before saving.
+          Use Take quick photo for camera capture, or Add from device for
+          gallery/files. Max {MAX_ORIGINAL_FILE_SIZE_MB} MB per original photo.
         </small>
 
         {photos.length === 0 ? (
