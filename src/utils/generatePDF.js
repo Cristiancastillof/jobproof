@@ -30,7 +30,7 @@ const formatStatusLabel = (status) => {
 };
 
 const formatRoleLabel = (role) => {
-  if (!role) return "";
+  if (!role) return "Worker";
 
   const roleMap = {
     lead: "Lead",
@@ -51,25 +51,17 @@ const formatRoleLabel = (role) => {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 };
 
-const formatTeamMember = (member) => {
+const formatTeamMember = (member, index) => {
   const name =
     member?.fullName ||
     member?.full_name ||
     member?.name ||
     member?.email ||
-    "Team member";
+    `Team member ${index + 1}`;
 
-  const role =
-    member?.roleOnJob ||
-    member?.role_on_job ||
-    member?.role ||
-    "";
+  const role = member?.roleOnJob || member?.role_on_job || member?.role || "";
 
-  const cleanRole = formatRoleLabel(role);
-
-  if (!cleanRole) return name;
-
-  return `${name} — ${cleanRole}`;
+  return role ? `${name} — ${formatRoleLabel(role)}` : name;
 };
 
 const formatDate = (dateValue) => {
@@ -125,7 +117,7 @@ const addSectionTitle = (doc, title, y) => {
   return y + 5;
 };
 
-const addTable = (doc, title, rows, y) => {
+const addTable = (doc, title, rows, y, options = {}) => {
   const cleanRows = rows.filter((row) => {
     return row.some((cell) => cell !== undefined && cell !== null);
   });
@@ -143,14 +135,17 @@ const addTable = (doc, title, rows, y) => {
       left: PAGE.margin,
       right: PAGE.margin,
     },
+    pageBreak: options.pageBreak || "auto",
+    rowPageBreak: "avoid",
     styles: {
       font: "helvetica",
-      fontSize: 9,
-      cellPadding: 3,
+      fontSize: options.fontSize || 8.5,
+      cellPadding: options.cellPadding || 2.6,
       textColor: COLORS.navy,
       lineColor: COLORS.border,
       lineWidth: 0.2,
       valign: "top",
+      overflow: "linebreak",
     },
     headStyles: {
       fillColor: COLORS.blue,
@@ -159,7 +154,7 @@ const addTable = (doc, title, rows, y) => {
     },
     columnStyles: {
       0: {
-        cellWidth: 48,
+        cellWidth: 45,
         fontStyle: "bold",
         fillColor: COLORS.lightSlate,
       },
@@ -169,17 +164,16 @@ const addTable = (doc, title, rows, y) => {
     },
   });
 
-  return doc.lastAutoTable.finalY + 10;
+  return doc.lastAutoTable.finalY + (options.afterGap || 8);
 };
 
 const addTextBox = (doc, title, text, y) => {
   const cleanText = formatValue(text, "No details provided.");
   const maxWidth = PAGE.width - PAGE.margin * 2;
   const lines = doc.splitTextToSize(cleanText, maxWidth - 8);
+  const boxHeight = Math.max(20, lines.length * 5 + 14);
 
-  const boxHeight = Math.max(18, lines.length * 5 + 14);
-
-  if (y + boxHeight > PAGE.height - 20) {
+  if (y + boxHeight > PAGE.height - 22) {
     doc.addPage();
     y = 20;
   }
@@ -235,7 +229,7 @@ const addImageGrid = async (doc, title, photos = [], y) => {
     return y;
   }
 
-  if (y > PAGE.height - 70) {
+  if (y > PAGE.height - 75) {
     doc.addPage();
     y = 20;
   }
@@ -251,7 +245,7 @@ const addImageGrid = async (doc, title, photos = [], y) => {
   let x = leftX;
 
   for (let index = 0; index < validPhotos.length; index += 1) {
-    if (y + imageHeight + 12 > PAGE.height - 20) {
+    if (y + imageHeight + 12 > PAGE.height - 22) {
       doc.addPage();
       y = 20;
       y = addSectionTitle(doc, title, y);
@@ -272,10 +266,24 @@ const addImageGrid = async (doc, title, photos = [], y) => {
 
     if (imageData) {
       try {
-        doc.addImage(imageData, "JPEG", x + 3, y + 8, imageWidth - 6, imageHeight - 11);
+        doc.addImage(
+          imageData,
+          "JPEG",
+          x + 3,
+          y + 8,
+          imageWidth - 6,
+          imageHeight - 11
+        );
       } catch {
         try {
-          doc.addImage(imageData, "PNG", x + 3, y + 8, imageWidth - 6, imageHeight - 11);
+          doc.addImage(
+            imageData,
+            "PNG",
+            x + 3,
+            y + 8,
+            imageWidth - 6,
+            imageHeight - 11
+          );
         } catch (error) {
           console.warn("Could not add image to PDF:", error);
           doc.setFont("helvetica", "normal");
@@ -319,7 +327,11 @@ const addHeader = async (doc, reportData) => {
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
-  doc.text(formatValue(reportData.reportNumber, "Report number pending"), PAGE.margin, 30);
+  doc.text(
+    formatValue(reportData.reportNumber, "Report number pending"),
+    PAGE.margin,
+    30
+  );
 
   const status = reportData.status || "pending";
   const statusColor = getStatusColor(status);
@@ -366,7 +378,12 @@ export const generatePDF = async (reportData = {}) => {
       ["Business phone", formatValue(reportData.businessPhone)],
       ["Prepared by", formatValue(reportData.workerName)],
     ],
-    y
+    y,
+    {
+      fontSize: 8.3,
+      cellPadding: 2.4,
+      afterGap: 7,
+    }
   );
 
   y = addTable(
@@ -388,20 +405,31 @@ export const generatePDF = async (reportData = {}) => {
       ["Finish time", formatTime(reportData.finishHour)],
       ["Total hours", formatValue(reportData.totalHours, "0")],
       ["Service type", formatValue(reportData.serviceType)],
-      ["Access notes", formatValue(reportData.clientAccessNotes)],
     ],
-    y
+    y,
+    {
+      fontSize: 8.1,
+      cellPadding: 2.2,
+      afterGap: 7,
+    }
   );
 
   const teamRows =
     reportData.teamInvolved && reportData.teamInvolved.length > 0
       ? reportData.teamInvolved.map((member, index) => [
           `Team member ${index + 1}`,
-          formatTeamMember(member),
+          formatTeamMember(member, index),
         ])
       : [["Team involved", "No team members listed."]];
 
-  y = addTable(doc, "Team involved", teamRows, y);
+  y = addTable(doc, "Team involved", teamRows, y, {
+    fontSize: 8.2,
+    cellPadding: 2.4,
+    afterGap: 7,
+  });
+
+  doc.addPage();
+  y = 20;
 
   y = addTextBox(doc, "Work completed", reportData.workCompleted, y);
   y = addTextBox(doc, "Issues found", reportData.issuesFound, y);

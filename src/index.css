@@ -4632,4 +4632,52 @@ textarea:focus::placeholder {
   z-index: 1055;
   border-radius: 16px;
   box-shadow: 0 14px 30px rgba(15, 23, 42, 0.18);
+}/* Mobile save feedback */
+
+.mobile-save-message {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 82px;
+  z-index: 1055;
+  border-radius: 16px;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.18);
+}
+
+.mobile-report-action-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1045;
+  display: none;
+  gap: 10px;
+  padding: 12px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.96);
+  border-top: 1px solid rgba(15, 23, 42, 0.1);
+  box-shadow: 0 -12px 28px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(14px);
+}
+
+.mobile-report-action-bar .btn {
+  flex: 1;
+  border-radius: 999px;
+  font-weight: 850;
+}
+
+@media (max-width: 991px) {
+  .mobile-report-action-bar {
+    display: flex;
+  }
+
+  body {
+    padding-bottom: 76px;
+  }
+}
+
+@media (min-width: 992px) {
+  .mobile-save-message {
+    display: none;
+  }
 }

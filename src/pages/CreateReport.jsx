@@ -840,7 +840,10 @@ const CreateReport = () => {
     }
 
     setSavingReport(true);
-    setMessage(null);
+    setMessage({
+      type: "info",
+      text: "Saving report...",
+    });
 
     try {
       const finalTotalHours =
@@ -872,9 +875,7 @@ const CreateReport = () => {
 
         const { data, error } = await updateQuery.select("*").single();
 
-        if (error) {
-          throw error;
-        }
+        if (error) throw error;
 
         savedReport = data;
 
@@ -897,9 +898,7 @@ const CreateReport = () => {
           .select("*")
           .single();
 
-        if (error) {
-          throw error;
-        }
+        if (error) throw error;
 
         savedReport = data;
 
@@ -973,10 +972,10 @@ const CreateReport = () => {
       setMessage({
         type: "success",
         text: hasNewPhotos
-          ? "Report, client, internal notes, status, team and photos saved successfully."
+          ? "Report saved successfully with photos."
           : isEditMode
-          ? "Report, client, internal notes, status and team updated successfully."
-          : "Report, client, internal notes, status and team saved successfully.",
+          ? "Report updated successfully."
+          : "Report saved successfully.",
       });
 
       if (!isEditMode) {
@@ -1156,12 +1155,15 @@ const CreateReport = () => {
           {message.text}
         </div>
       )}
-      
+
       {message && (
-  <div className={`alert alert-${message.type} mobile-save-message d-lg-none`} role="alert">
-    {message.text}
-  </div>
-)}
+        <div
+          className={`alert alert-${message.type} mobile-save-message d-lg-none`}
+          role="alert"
+        >
+          {message.text}
+        </div>
+      )}
 
       {workerCannotEditCompletedReport && (
         <div className="alert alert-warning" role="alert">

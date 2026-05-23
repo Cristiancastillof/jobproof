@@ -52,7 +52,6 @@ const InstallAppButton = () => {
     setMessage("");
 
     if (isInstalled) {
-      setMessage("JobProof is already installed on this device.");
       return;
     }
 
@@ -77,24 +76,12 @@ const InstallAppButton = () => {
     }
 
     setMessage(
-      "If the install option does not appear, open your browser menu and choose Install app or Add to Home screen."
+      "Open your browser menu and choose Install app or Add to Home screen."
     );
   };
 
   if (isInstalled) {
-    return (
-      <div className="install-app-card installed">
-        <div>
-          <p className="eyebrow mb-1">Mobile app</p>
-          <h2 className="h5 mb-1">JobProof is installed</h2>
-          <p className="text-muted mb-0">
-            You can open JobProof from your device home screen.
-          </p>
-        </div>
-
-        <span className="install-app-badge">Installed</span>
-      </div>
-    );
+    return null;
   }
 
   return (
@@ -125,6 +112,7 @@ const InstallAppButton = () => {
       {showIOSHelp && (
         <div className="install-ios-help">
           <strong>Install on iPhone or iPad</strong>
+
           <ol className="mb-0 mt-2">
             <li>Open JobProof in Safari.</li>
             <li>Tap the Share button.</li>
