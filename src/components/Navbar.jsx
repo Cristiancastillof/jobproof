@@ -16,7 +16,7 @@ const formatRoleLabel = (role) => {
 };
 
 const getInitials = (nameOrEmail) => {
-  if (!nameOrEmail) return "JP";
+  if (!nameOrEmail) return "U";
 
   const cleanValue = String(nameOrEmail).trim();
 
@@ -117,16 +117,28 @@ const Navbar = () => {
             width: 42px;
             height: 42px;
             flex: 0 0 42px;
-            border-radius: 14px;
+            border-radius: 15px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             color: #ffffff;
             background: linear-gradient(135deg, #1e40af, #0f172a);
             box-shadow: 0 12px 24px rgba(30, 64, 175, 0.28);
+            position: relative;
+          }
+
+          .jp2-brand-check {
+            width: 22px;
+            height: 22px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.16);
+            border: 1px solid rgba(255, 255, 255, 0.22);
             font-size: 0.9rem;
             font-weight: 950;
-            letter-spacing: -0.04em;
+            line-height: 1;
           }
 
           .jp2-brand-text {
@@ -457,7 +469,9 @@ const Navbar = () => {
             className="jp2-brand"
             onClick={() => setIsMenuOpen(false)}
           >
-            <span className="jp2-brand-mark">JP</span>
+            <span className="jp2-brand-mark">
+              <span className="jp2-brand-check">✓</span>
+            </span>
 
             <span className="jp2-brand-text">
               <strong>JobProof</strong>
