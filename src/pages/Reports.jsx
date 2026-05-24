@@ -2,11 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
-import {
-  buildClientReportMailtoLink,
-  copyClientReportMessage,
-} from "../utils/clientMessage";
-import { getPublicReportUrl } from "../utils/publicLinks";
 import { recordReportActivity } from "../utils/reportActivity";
 
 const STATUS_OPTIONS = [
@@ -15,18 +10,25 @@ const STATUS_OPTIONS = [
   { value: "completed", label: "Completed" },
 ];
 
-const formatStatusLabel = (status) => {
-  if (!status) return "Pending";
-  return status.charAt(0).toUpperCase() + status.slice(1);
+const getStatusLabel = (status) => {
+  if (status === "completed") return "Completed";
+  if (status === "checked") return "Checked";
+  return "Pending";
+};
+
+const getStatusClass = (status) => {
+  if (status === "completed") return "completed";
+  if (status === "checked") return "checked";
+  return "pending";
 };
 
 const formatDate = (dateValue) => {
   if (!dateValue) return "Not provided";
 
-  const date = new Date(dateValue);
+  const date = new Date(`${dateValue}T00:00:00`);
 
   if (Number.isNaN(date.getTime())) {
-    return dateValue;
+    return "Not provided";
   }
 
   return date.toLocaleDateString("en-AU", {
@@ -36,93 +38,93 @@ const formatDate = (dateValue) => {
   });
 };
 
-const formatValue = (value, fallback = "Not provided") => {
-  if (!value || String(value).trim() === "") return fallback;
-  return value;
-};
+const formatDateTime = (dateValue) => {
+  if (!dateValue) return "Not available";
 
-const getClientName = (report) => {
-  return (
-    report.client_display_name ||
-    report.client_name ||
-    report.client_contact_person ||
-    "Client not provided"
-  );
-};
+  const date = new Date(dateValue);
 
-const getClientAddress = (report) => {
-  return (
-    report.client_address_snapshot ||
-    report.job_address ||
-    "Address not provided"
-  );
-};
-
-const canManageStatus = (profile) => {
-  return profile?.role === "admin" || profile?.role === "supervisor";
-};
-
-const canEditReport = ({ report, profile, user }) => {
-  if (!report || !profile || !user) return false;
-
-  if (profile.role === "admin" || profile.role === "supervisor") {
-    return true;
+  if (Number.isNaN(date.getTime())) {
+    return "Not available";
   }
 
-  if (profile.role === "worker") {
-    return report.created_by === user.id && report.status !== "completed";
-  }
-
-  return false;
+  return date.toLocaleString("en-AU", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 };
 
-const canSendReport = (report, profile) => {
-  const isAdminOrSupervisor =
-    profile?.role === "admin" || profile?.role === "supervisor";
+const createStats = (reports = []) => ({
+  total: reports.length,
+  pending: reports.filter((report) => (report.status || "pending") === "pending")
+    .length,
+  checked: reports.filter((report) => (report.status || "pending") === "checked")
+    .length,
+  completed: reports.filter(
+    (report) => (report.status || "pending") === "completed"
+  ).length,
+});
+
+const StatCard = ({ label, value, helper, tone = "default", onClick }) => {
+  const Component = onClick ? "button" : "div";
 
   return (
-    isAdminOrSupervisor &&
-    report?.status === "completed" &&
-    Boolean(report?.client_email) &&
-    Boolean(report?.public_share_enabled) &&
-    Boolean(report?.public_share_token)
+    <Component
+      type={onClick ? "button" : undefined}
+      className={`jp-reports-stat ${tone}`}
+      onClick={onClick}
+    >
+      <span>{label}</span>
+      <strong>{value}</strong>
+      {helper && <small>{helper}</small>}
+    </Component>
   );
 };
 
 const Reports = () => {
-  const { user, profile, profileLoading } = useAuth();
+  const { user, profile, displayRole, profileLoading } = useAuth();
 
   const [reports, setReports] = useState([]);
   const [loadingReports, setLoadingReports] = useState(true);
-  const [updatingStatusId, setUpdatingStatusId] = useState(null);
-  const [updatingShareId, setUpdatingShareId] = useState(null);
-  const [copiedReportId, setCopiedReportId] = useState(null);
-  const [copiedMessageReportId, setCopiedMessageReportId] = useState(null);
+  const [updatingReportId, setUpdatingReportId] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [message, setMessage] = useState(null);
 
-  const canUpdateStatus = canManageStatus(profile);
-  const isAdminOrSupervisor =
-    profile?.role === "admin" || profile?.role === "supervisor";
+  const role = profile?.role || "worker";
+  const isAdmin = role === "admin";
+  const isSupervisor = role === "supervisor";
+  const isWorker = role === "worker";
+  const canManageReports = isAdmin || isSupervisor;
+
+  const stats = useMemo(() => createStats(reports), [reports]);
+
+  const completionRate = useMemo(() => {
+    if (!stats.total) return 0;
+    return Math.round((stats.completed / stats.total) * 100);
+  }, [stats.total, stats.completed]);
 
   const filteredReports = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
 
     return reports.filter((report) => {
-      const matchesStatus =
-        statusFilter === "all" || report.status === statusFilter;
+      const reportStatus = report.status || "pending";
 
-      const searchableText = [
+      const matchesStatus =
+        statusFilter === "all" || reportStatus === statusFilter;
+
+      const searchText = [
         report.report_number,
-        report.client_name,
         report.client_display_name,
+        report.client_name,
         report.client_company_name,
         report.client_contact_person,
         report.client_email,
         report.client_phone,
-        report.client_address_snapshot,
         report.job_address,
+        report.client_address_snapshot,
         report.service_type,
         report.status,
       ]
@@ -131,33 +133,26 @@ const Reports = () => {
         .toLowerCase();
 
       const matchesSearch =
-        !normalizedSearch || searchableText.includes(normalizedSearch);
+        !normalizedSearch || searchText.includes(normalizedSearch);
 
       return matchesStatus && matchesSearch;
     });
   }, [reports, searchTerm, statusFilter]);
 
-  const statusCounts = useMemo(() => {
-    return reports.reduce(
-      (counts, report) => {
-        const status = report.status || "pending";
+  const canEditReport = (report) => {
+    if (!report) return false;
+    if (isAdmin || isSupervisor) return true;
 
-        return {
-          ...counts,
-          [status]: (counts[status] || 0) + 1,
-          total: counts.total + 1,
-        };
-      },
-      {
-        total: 0,
-        pending: 0,
-        checked: 0,
-        completed: 0,
-      }
+    return (
+      isWorker &&
+      report.created_by === user?.id &&
+      (report.status || "pending") !== "completed"
     );
-  }, [reports]);
+  };
 
   const loadReports = async () => {
+    if (profileLoading) return;
+
     if (!user?.id || !profile?.company_id) {
       setLoadingReports(false);
       return;
@@ -176,24 +171,20 @@ const Reports = () => {
           created_by,
           report_number,
           client_id,
-          client_name,
           client_display_name,
           client_company_name,
           client_contact_person,
           client_email,
           client_phone,
-          client_address_snapshot,
-          client_access_notes,
+          client_name,
           job_address,
+          client_address_snapshot,
           job_date,
           starting_hour,
           finish_hour,
           total_hours,
           service_type,
           status,
-          public_share_token,
-          public_share_enabled,
-          public_shared_at,
           created_at,
           updated_at
         `
@@ -201,9 +192,7 @@ const Reports = () => {
         .eq("company_id", profile.company_id)
         .order("created_at", { ascending: false });
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
       setReports(data || []);
     } catch (error) {
@@ -219,13 +208,11 @@ const Reports = () => {
   };
 
   useEffect(() => {
-    if (profileLoading) return;
-
     loadReports();
   }, [user, profile, profileLoading]);
 
-  const handleStatusChange = async (report, nextStatus) => {
-    if (!canUpdateStatus) {
+  const handleUpdateStatus = async (report, nextStatus) => {
+    if (!canManageReports) {
       setMessage({
         type: "warning",
         text: "Only admins and supervisors can update report status.",
@@ -233,10 +220,11 @@ const Reports = () => {
       return;
     }
 
-    const shouldDisableSharing =
-      nextStatus !== "completed" && report.public_share_enabled;
+    if (!report?.id || report.status === nextStatus) return;
 
-    setUpdatingStatusId(report.id);
+    const previousStatus = report.status || "pending";
+
+    setUpdatingReportId(report.id);
     setMessage(null);
 
     try {
@@ -244,86 +232,38 @@ const Reports = () => {
         .from("reports")
         .update({
           status: nextStatus,
-          public_share_enabled: shouldDisableSharing
-            ? false
-            : report.public_share_enabled,
           updated_at: new Date().toISOString(),
         })
         .eq("id", report.id)
         .eq("company_id", profile.company_id)
-        .select(
-          `
-          id,
-          company_id,
-          created_by,
-          report_number,
-          client_id,
-          client_name,
-          client_display_name,
-          client_company_name,
-          client_contact_person,
-          client_email,
-          client_phone,
-          client_address_snapshot,
-          client_access_notes,
-          job_address,
-          job_date,
-          starting_hour,
-          finish_hour,
-          total_hours,
-          service_type,
-          status,
-          public_share_token,
-          public_share_enabled,
-          public_shared_at,
-          created_at,
-          updated_at
-        `
-        )
+        .select("*")
         .single();
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
       await recordReportActivity({
         reportId: report.id,
         companyId: profile.company_id,
         actorId: user.id,
         activityType: "status_changed",
-        previousValue: report.status || "pending",
+        previousValue: previousStatus,
         newValue: nextStatus,
-        activityNote: `Status changed from ${formatStatusLabel(
-          report.status || "pending"
-        )} to ${formatStatusLabel(nextStatus)}.`,
+        activityNote: `Status changed from ${getStatusLabel(
+          previousStatus
+        )} to ${getStatusLabel(nextStatus)}.`,
       });
-
-      if (shouldDisableSharing) {
-        await recordReportActivity({
-          reportId: report.id,
-          companyId: profile.company_id,
-          actorId: user.id,
-          activityType: "sharing_disabled",
-          previousValue: "enabled",
-          newValue: "disabled",
-          activityNote:
-            "Client sharing disabled because report is no longer completed.",
-        });
-      }
 
       setReports((currentReports) =>
         currentReports.map((currentReport) =>
-          currentReport.id === report.id ? data : currentReport
+          currentReport.id === report.id ? { ...currentReport, ...data } : currentReport
         )
       );
 
       setMessage({
         type: "success",
-        text: shouldDisableSharing
-          ? `Report marked as ${formatStatusLabel(
-              nextStatus
-            )}. Client sharing was disabled.`
-          : `Report marked as ${formatStatusLabel(nextStatus)}.`,
+        text: `Report ${report.report_number || ""} moved to ${getStatusLabel(
+          nextStatus
+        )}.`,
       });
     } catch (error) {
       console.error("Error updating report status:", error);
@@ -332,223 +272,42 @@ const Reports = () => {
         type: "danger",
         text:
           error.message ||
-          "There was an error updating this report status. Please try again.",
+          "There was an error updating this report. Please try again.",
       });
     } finally {
-      setUpdatingStatusId(null);
+      setUpdatingReportId(null);
     }
   };
 
-  const handleEnableSharing = async (report) => {
-    if (!isAdminOrSupervisor) {
-      setMessage({
-        type: "warning",
-        text: "Only admins and supervisors can enable client sharing.",
-      });
-      return;
-    }
+  const handleCopyReportSummary = async (report) => {
+    const reportUrl = `${window.location.origin}/reports/${report.id}`;
 
-    if (report.status !== "completed") {
-      setMessage({
-        type: "warning",
-        text: "Only completed reports can be shared with clients.",
-      });
-      return;
-    }
-
-    setUpdatingShareId(report.id);
-    setMessage(null);
+    const text = [
+      `JobProof Report: ${report.report_number || "No number"}`,
+      `Client: ${
+        report.client_display_name || report.client_name || "Not provided"
+      }`,
+      `Service: ${report.service_type || "Not provided"}`,
+      `Date: ${formatDate(report.job_date)}`,
+      `Status: ${getStatusLabel(report.status)}`,
+      `Link: ${reportUrl}`,
+    ].join("\n");
 
     try {
-      const { data, error } = await supabase
-        .from("reports")
-        .update({
-          public_share_enabled: true,
-          public_shared_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", report.id)
-        .eq("company_id", profile.company_id)
-        .select(
-          "id, public_share_token, public_share_enabled, public_shared_at, updated_at"
-        )
-        .single();
-
-      if (error) {
-        throw error;
-      }
-
-      await recordReportActivity({
-        reportId: report.id,
-        companyId: profile.company_id,
-        actorId: user.id,
-        activityType: "sharing_enabled",
-        newValue: "enabled",
-        activityNote: "Client sharing enabled.",
-      });
-
-      setReports((currentReports) =>
-        currentReports.map((currentReport) =>
-          currentReport.id === report.id
-            ? {
-                ...currentReport,
-                public_share_token: data.public_share_token,
-                public_share_enabled: data.public_share_enabled,
-                public_shared_at: data.public_shared_at,
-                updated_at: data.updated_at,
-              }
-            : currentReport
-        )
-      );
+      await navigator.clipboard.writeText(text);
 
       setMessage({
         type: "success",
-        text: "Client sharing enabled for this report.",
+        text: "Report summary copied to clipboard.",
       });
     } catch (error) {
-      console.error("Error enabling sharing:", error);
+      console.error("Copy error:", error);
 
       setMessage({
-        type: "danger",
-        text:
-          error.message ||
-          "There was an error enabling client sharing for this report.",
-      });
-    } finally {
-      setUpdatingShareId(null);
-    }
-  };
-
-  const handleCopyClientLink = async (report) => {
-    const publicUrl = getPublicReportUrl(report.public_share_token);
-
-    if (!publicUrl) return;
-
-    try {
-      await navigator.clipboard.writeText(publicUrl);
-
-      await recordReportActivity({
-        reportId: report.id,
-        companyId: profile.company_id,
-        actorId: user.id,
-        activityType: "client_link_copied",
-        newValue: "copied",
-        activityNote: "Client report link copied.",
-      });
-
-      setCopiedReportId(report.id);
-
-      setTimeout(() => {
-        setCopiedReportId(null);
-      }, 1800);
-    } catch (error) {
-      console.error("Error copying client link:", error);
-      window.prompt("Copy this client report link:", publicUrl);
-    }
-  };
-
-  const handleCopyClientMessage = async (report) => {
-    try {
-      await copyClientReportMessage(report);
-
-      setCopiedMessageReportId(report.id);
-
-      setTimeout(() => {
-        setCopiedMessageReportId(null);
-      }, 1800);
-    } catch (error) {
-      console.error("Error copying client message:", error);
-
-      setMessage({
-        type: "danger",
-        text: "There was an error copying the client message.",
+        type: "warning",
+        text: "Could not copy automatically. Please copy the report details manually.",
       });
     }
-  };
-
-  const renderStatusControl = (report) => {
-    const status = report.status || "pending";
-
-    if (!canUpdateStatus) {
-      return (
-        <span className={`report-status-badge ${status}`}>
-          {formatStatusLabel(status)}
-        </span>
-      );
-    }
-
-    return (
-      <div className="reports-status-control">
-        <select
-          className={`form-select reports-status-select reports-status-${status}`}
-          value={status}
-          onChange={(event) => handleStatusChange(report, event.target.value)}
-          disabled={updatingStatusId === report.id}
-        >
-          {STATUS_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-
-        {updatingStatusId === report.id && (
-          <small className="text-muted">Updating...</small>
-        )}
-      </div>
-    );
-  };
-
-  const renderShareActions = (report, size = "") => {
-    const buttonSizeClass = size ? `btn-${size}` : "";
-
-    if (!isAdminOrSupervisor || report.status !== "completed") {
-      return null;
-    }
-
-    if (!report.public_share_enabled) {
-      return (
-        <button
-          type="button"
-          className={`btn ${buttonSizeClass} btn-outline-primary`}
-          onClick={() => handleEnableSharing(report)}
-          disabled={updatingShareId === report.id}
-        >
-          {updatingShareId === report.id ? "Enabling..." : "Enable share"}
-        </button>
-      );
-    }
-
-    return (
-      <>
-        <button
-          type="button"
-          className={`btn ${buttonSizeClass} btn-outline-primary`}
-          onClick={() => handleCopyClientLink(report)}
-        >
-          {copiedReportId === report.id ? "Copied!" : "Copy link"}
-        </button>
-
-        <button
-          type="button"
-          className={`btn ${buttonSizeClass} btn-outline-secondary`}
-          onClick={() => handleCopyClientMessage(report)}
-        >
-          {copiedMessageReportId === report.id ? "Copied!" : "Copy message"}
-        </button>
-
-        {canSendReport(report, profile) && (
-          <a
-            className={`btn ${buttonSizeClass} btn-primary`}
-            href={buildClientReportMailtoLink(report)}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Send
-          </a>
-        )}
-      </>
-    );
   };
 
   if (profileLoading || loadingReports) {
@@ -561,7 +320,7 @@ const Reports = () => {
         <h1 className="h5">Loading reports</h1>
 
         <p className="text-muted mb-0">
-          Please wait while JobProof loads your reports.
+          Please wait while JobProof loads your report archive.
         </p>
       </section>
     );
@@ -590,96 +349,578 @@ const Reports = () => {
   }
 
   return (
-    <section>
-      <div className="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4">
-        <div>
-          <p className="eyebrow mb-2">Reports</p>
+    <>
+      <style>
+        {`
+          .jp-reports-page {
+            display: grid;
+            gap: 22px;
+          }
 
-          <h1 className="section-title mb-2">Job reports</h1>
+          .jp-reports-hero {
+            position: relative;
+            overflow: hidden;
+            display: grid;
+            grid-template-columns: 1.35fr 0.65fr;
+            gap: 22px;
+            padding: 28px;
+            border-radius: 34px;
+            color: #ffffff;
+            background:
+              radial-gradient(circle at top right, rgba(245, 158, 11, 0.36), transparent 30%),
+              radial-gradient(circle at bottom left, rgba(59, 130, 246, 0.35), transparent 30%),
+              linear-gradient(135deg, #020617, #1e40af);
+            box-shadow: 0 26px 74px rgba(15, 23, 42, 0.24);
+          }
 
-          <p className="section-subtitle mb-0">
-            Track job reports, client details, workflow status and client-ready
-            actions.
-          </p>
+          .jp-reports-eyebrow {
+            display: inline-flex;
+            margin-bottom: 14px;
+            color: #bfdbfe;
+            font-size: 0.76rem;
+            font-weight: 950;
+            text-transform: uppercase;
+            letter-spacing: 0.13em;
+          }
+
+          .jp-reports-hero h1 {
+            max-width: 780px;
+            margin: 0;
+            font-size: clamp(2.1rem, 5vw, 3.7rem);
+            line-height: 0.94;
+            font-weight: 950;
+            letter-spacing: -0.07em;
+          }
+
+          .jp-reports-hero p {
+            max-width: 680px;
+            margin: 16px 0 0;
+            color: #dbeafe;
+            font-size: 1rem;
+            line-height: 1.65;
+            font-weight: 650;
+          }
+
+          .jp-reports-hero-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 22px;
+          }
+
+          .jp-reports-hero-actions .btn {
+            min-height: 44px;
+            border-radius: 999px;
+            font-weight: 900;
+          }
+
+          .jp-reports-hero-panel {
+            align-self: stretch;
+            display: grid;
+            align-content: space-between;
+            gap: 18px;
+            padding: 20px;
+            border-radius: 28px;
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(18px);
+          }
+
+          .jp-reports-hero-panel span {
+            display: block;
+            color: #bfdbfe;
+            font-size: 0.76rem;
+            font-weight: 950;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+          }
+
+          .jp-reports-hero-panel strong {
+            display: block;
+            margin-top: 8px;
+            color: #ffffff;
+            font-size: 2.4rem;
+            line-height: 1;
+            font-weight: 950;
+            letter-spacing: -0.06em;
+          }
+
+          .jp-reports-progress-track {
+            overflow: hidden;
+            height: 10px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.18);
+          }
+
+          .jp-reports-progress-fill {
+            height: 100%;
+            border-radius: inherit;
+            background: #f59e0b;
+          }
+
+          .jp-reports-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+          }
+
+          .jp-reports-stat {
+            appearance: none;
+            width: 100%;
+            text-align: left;
+            min-height: 126px;
+            padding: 20px;
+            border-radius: 24px;
+            background: #ffffff;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            box-shadow: 0 16px 42px rgba(15, 23, 42, 0.07);
+          }
+
+          .jp-reports-stat span {
+            display: block;
+            color: #64748b;
+            font-size: 0.76rem;
+            font-weight: 950;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+          }
+
+          .jp-reports-stat strong {
+            display: block;
+            margin-top: 10px;
+            color: #0f172a;
+            font-size: 2.15rem;
+            line-height: 1;
+            font-weight: 950;
+            letter-spacing: -0.06em;
+          }
+
+          .jp-reports-stat small {
+            display: block;
+            margin-top: 12px;
+            color: #64748b;
+            font-size: 0.82rem;
+            font-weight: 650;
+            line-height: 1.35;
+          }
+
+          .jp-reports-stat.pending {
+            background: linear-gradient(180deg, #ffffff, #fffbeb);
+            border-color: rgba(245, 158, 11, 0.22);
+          }
+
+          .jp-reports-stat.checked {
+            background: linear-gradient(180deg, #ffffff, #eff6ff);
+            border-color: rgba(30, 64, 175, 0.18);
+          }
+
+          .jp-reports-stat.completed {
+            background: linear-gradient(180deg, #ffffff, #f0fdf4);
+            border-color: rgba(22, 101, 52, 0.18);
+          }
+
+          .jp-reports-panel {
+            padding: 22px;
+            border-radius: 28px;
+            background: #ffffff;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            box-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+          }
+
+          .jp-reports-panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 14px;
+            margin-bottom: 16px;
+          }
+
+          .jp-reports-panel-header h2 {
+            margin: 0;
+            color: #0f172a;
+            font-size: 1.3rem;
+            font-weight: 950;
+            letter-spacing: -0.04em;
+          }
+
+          .jp-reports-panel-header p {
+            margin: 6px 0 0;
+            color: #64748b;
+            font-weight: 650;
+          }
+
+          .jp-reports-search-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 12px;
+            align-items: end;
+            margin-bottom: 16px;
+          }
+
+          .jp-reports-page .form-control {
+            min-height: 46px;
+            border-radius: 16px;
+            border-color: rgba(15, 23, 42, 0.14);
+            font-weight: 650;
+          }
+
+          .jp-reports-page .form-label {
+            color: #334155;
+            font-size: 0.82rem;
+            font-weight: 900;
+          }
+
+          .jp-reports-filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+          }
+
+          .jp-reports-filter {
+            border: 1px solid rgba(15, 23, 42, 0.1);
+            border-radius: 999px;
+            padding: 8px 12px;
+            color: #475569;
+            background: #ffffff;
+            font-size: 0.84rem;
+            font-weight: 900;
+          }
+
+          .jp-reports-filter.active {
+            color: #1e40af;
+            background: #eff6ff;
+            border-color: rgba(30, 64, 175, 0.22);
+          }
+
+          .jp-reports-list {
+            display: grid;
+            gap: 14px;
+          }
+
+          .jp-report-card {
+            overflow: hidden;
+            border-radius: 24px;
+            background: #ffffff;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            box-shadow: 0 14px 38px rgba(15, 23, 42, 0.06);
+          }
+
+          .jp-report-card-main {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 14px;
+            padding: 18px;
+            background: linear-gradient(180deg, #ffffff, #f8fafc);
+          }
+
+          .jp-report-card h3 {
+            margin: 0;
+            color: #0f172a;
+            font-size: 1.05rem;
+            font-weight: 950;
+            letter-spacing: -0.04em;
+          }
+
+          .jp-report-client {
+            display: block;
+            margin-top: 5px;
+            color: #64748b;
+            font-size: 0.9rem;
+            font-weight: 800;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+
+          .jp-report-details-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 10px;
+            padding: 0 18px 18px;
+          }
+
+          .jp-report-detail {
+            padding: 12px;
+            border-radius: 16px;
+            background: #f8fafc;
+            border: 1px solid rgba(15, 23, 42, 0.06);
+          }
+
+          .jp-report-detail span {
+            display: block;
+            color: #64748b;
+            font-size: 0.7rem;
+            font-weight: 950;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+          }
+
+          .jp-report-detail strong {
+            display: block;
+            margin-top: 4px;
+            color: #0f172a;
+            font-size: 0.86rem;
+            font-weight: 850;
+            word-break: break-word;
+          }
+
+          .jp-report-status {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 96px;
+            padding: 7px 10px;
+            border-radius: 999px;
+            font-size: 0.7rem;
+            font-weight: 950;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+          }
+
+          .jp-report-status.pending {
+            color: #92400e;
+            background: #fffbeb;
+            border: 1px solid rgba(245, 158, 11, 0.22);
+          }
+
+          .jp-report-status.checked {
+            color: #1e40af;
+            background: #eff6ff;
+            border: 1px solid rgba(30, 64, 175, 0.18);
+          }
+
+          .jp-report-status.completed {
+            color: #166534;
+            background: #f0fdf4;
+            border: 1px solid rgba(22, 101, 52, 0.18);
+          }
+
+          .jp-report-card-actions {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px 18px;
+            border-top: 1px solid rgba(15, 23, 42, 0.07);
+            background: #ffffff;
+          }
+
+          .jp-report-card-actions-left,
+          .jp-report-card-actions-right {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+          }
+
+          .jp-report-card-actions .btn,
+          .jp-report-status-select {
+            border-radius: 999px;
+            font-weight: 850;
+          }
+
+          .jp-report-status-select {
+            min-height: 34px;
+            padding: 4px 12px;
+            border: 1px solid rgba(15, 23, 42, 0.14);
+            background: #ffffff;
+            color: #334155;
+            font-size: 0.82rem;
+          }
+
+          .jp-reports-empty {
+            display: grid;
+            place-items: center;
+            min-height: 260px;
+            padding: 28px;
+            border-radius: 24px;
+            text-align: center;
+            background: #f8fafc;
+            border: 1px dashed rgba(15, 23, 42, 0.16);
+          }
+
+          .jp-reports-empty h3 {
+            color: #0f172a;
+            font-weight: 950;
+          }
+
+          .jp-reports-empty p {
+            color: #64748b;
+            font-weight: 650;
+          }
+
+          @media (max-width: 991px) {
+            .jp-reports-hero {
+              grid-template-columns: 1fr;
+            }
+
+            .jp-reports-stats-grid {
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .jp-report-details-grid {
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .jp-reports-search-grid {
+              grid-template-columns: 1fr;
+            }
+          }
+
+          @media (max-width: 576px) {
+            .jp-reports-page {
+              gap: 18px;
+            }
+
+            .jp-reports-hero {
+              padding: 22px;
+              border-radius: 26px;
+            }
+
+            .jp-reports-hero h1 {
+              font-size: 2.2rem;
+            }
+
+            .jp-reports-hero-actions {
+              display: grid;
+              grid-template-columns: 1fr;
+            }
+
+            .jp-reports-hero-actions .btn {
+              width: 100%;
+            }
+
+            .jp-reports-stats-grid,
+            .jp-report-details-grid {
+              grid-template-columns: 1fr;
+            }
+
+            .jp-reports-panel {
+              padding: 18px;
+              border-radius: 24px;
+            }
+
+            .jp-reports-panel-header,
+            .jp-report-card-main,
+            .jp-report-card-actions {
+              grid-template-columns: 1fr;
+              flex-direction: column;
+            }
+
+            .jp-report-card-actions-left,
+            .jp-report-card-actions-right,
+            .jp-report-card-actions .btn,
+            .jp-report-status-select {
+              width: 100%;
+            }
+
+            .jp-report-card-actions-left,
+            .jp-report-card-actions-right {
+              display: grid;
+              grid-template-columns: 1fr;
+            }
+          }
+        `}
+      </style>
+
+      <section className="jp-reports-page">
+        <div className="jp-reports-hero">
+          <div>
+            <span className="jp-reports-eyebrow">Report archive</span>
+
+            <h1>Reports Management</h1>
+
+            <p>
+              Search, filter, review and manage every job report from one
+              operational workspace.
+            </p>
+
+            <div className="jp-reports-hero-actions">
+              <Link to="/create-report" className="btn btn-light">
+                Create Report
+              </Link>
+
+              <button
+                type="button"
+                className="btn btn-outline-light"
+                onClick={loadReports}
+              >
+                Refresh Reports
+              </button>
+            </div>
+          </div>
+
+          <aside className="jp-reports-hero-panel">
+            <div>
+              <span>Completion rate</span>
+              <strong>{completionRate}%</strong>
+            </div>
+
+            <div className="jp-reports-progress-track">
+              <div
+                className="jp-reports-progress-fill"
+                style={{ width: `${completionRate}%` }}
+              />
+            </div>
+
+            <small>
+              {stats.completed} of {stats.total} visible reports completed
+            </small>
+          </aside>
         </div>
 
-        <Link to="/create-report" className="btn btn-primary">
-          Create Report
-        </Link>
-      </div>
+        {message && (
+          <div className={`alert alert-${message.type}`} role="alert">
+            {message.text}
+          </div>
+        )}
 
-      {message && (
-        <div className={`alert alert-${message.type}`} role="alert">
-          {message.text}
+        <div className="jp-reports-stats-grid">
+          <StatCard
+            label="Total reports"
+            value={stats.total}
+            helper="All visible reports"
+            onClick={() => setStatusFilter("all")}
+          />
+
+          <StatCard
+            label="Pending"
+            value={stats.pending}
+            helper="Waiting for review"
+            tone="pending"
+            onClick={() => setStatusFilter("pending")}
+          />
+
+          <StatCard
+            label="Checked"
+            value={stats.checked}
+            helper="Reviewed and ready"
+            tone="checked"
+            onClick={() => setStatusFilter("checked")}
+          />
+
+          <StatCard
+            label="Completed"
+            value={stats.completed}
+            helper="Closed reports"
+            tone="completed"
+            onClick={() => setStatusFilter("completed")}
+          />
         </div>
-      )}
 
-      {profile?.role === "worker" && (
-        <div className="alert alert-light border" role="alert">
-          Workers can create and edit their own reports while they are Pending or
-          Checked. Completed reports can only be changed by a supervisor or
-          admin.
-        </div>
-      )}
+        <div className="jp-reports-panel">
+          <div className="jp-reports-panel-header">
+            <div>
+              <h2>Report archive</h2>
+              <p>
+                {filteredReports.length} record
+                {filteredReports.length === 1 ? "" : "s"} found · Role:{" "}
+                {displayRole || role}
+              </p>
+            </div>
+          </div>
 
-      <div className="reports-summary-grid mb-4">
-        <button
-          type="button"
-          className={
-            statusFilter === "all"
-              ? "reports-summary-card active"
-              : "reports-summary-card"
-          }
-          onClick={() => setStatusFilter("all")}
-        >
-          <span>Total</span>
-          <strong>{statusCounts.total}</strong>
-        </button>
-
-        <button
-          type="button"
-          className={
-            statusFilter === "pending"
-              ? "reports-summary-card active pending"
-              : "reports-summary-card pending"
-          }
-          onClick={() => setStatusFilter("pending")}
-        >
-          <span>Pending</span>
-          <strong>{statusCounts.pending}</strong>
-        </button>
-
-        <button
-          type="button"
-          className={
-            statusFilter === "checked"
-              ? "reports-summary-card active checked"
-              : "reports-summary-card checked"
-          }
-          onClick={() => setStatusFilter("checked")}
-        >
-          <span>Checked</span>
-          <strong>{statusCounts.checked}</strong>
-        </button>
-
-        <button
-          type="button"
-          className={
-            statusFilter === "completed"
-              ? "reports-summary-card active completed"
-              : "reports-summary-card completed"
-          }
-          onClick={() => setStatusFilter("completed")}
-        >
-          <span>Completed</span>
-          <strong>{statusCounts.completed}</strong>
-        </button>
-      </div>
-
-      <div className="card shadow-sm border-0 mb-4">
-        <div className="card-body p-4">
-          <div className="row g-3 align-items-end">
-            <div className="col-lg-8">
+          <div className="jp-reports-search-grid">
+            <div>
               <label htmlFor="reportSearch" className="form-label">
                 Search reports
               </label>
@@ -690,242 +931,172 @@ const Reports = () => {
                 className="form-control"
                 value={searchTerm}
                 onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Search by report number, client, email, phone, address, service or status..."
+                placeholder="Search by report number, client, address, service or status..."
               />
             </div>
 
-            <div className="col-lg-4">
-              <label htmlFor="statusFilter" className="form-label">
-                Status
-              </label>
-
-              <select
-                id="statusFilter"
-                className="form-select"
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
-              >
-                <option value="all">All statuses</option>
-                <option value="pending">Pending</option>
-                <option value="checked">Checked</option>
-                <option value="completed">Completed</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {filteredReports.length === 0 ? (
-        <div className="card shadow-sm border-0">
-          <div className="card-body p-4 p-md-5 text-center">
-            <p className="eyebrow mb-2">No reports found</p>
-
-            <h2 className="h4 mb-3">Create your first job report</h2>
-
-            <p className="text-muted mb-4">
-              Once your team creates reports, they will appear here with client
-              details and workflow status.
-            </p>
-
-            <Link to="/create-report" className="btn btn-primary">
-              Create Report
-            </Link>
-          </div>
-        </div>
-      ) : (
-        <>
-          <div className="card shadow-sm border-0 reports-table-card">
-            <div className="table-responsive">
-              <table className="table align-middle mb-0 reports-table">
-                <thead>
-                  <tr>
-                    <th>Report</th>
-                    <th>Client / Job site</th>
-                    <th>Contact</th>
-                    <th>Job</th>
-                    <th>Status</th>
-                    <th className="text-end">Actions</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {filteredReports.map((report) => {
-                    const editable = canEditReport({ report, profile, user });
-
-                    return (
-                      <tr key={report.id}>
-                        <td>
-                          <strong>{report.report_number}</strong>
-                          <small className="d-block text-muted">
-                            Created {formatDate(report.created_at)}
-                          </small>
-                        </td>
-
-                        <td>
-                          <strong>{getClientName(report)}</strong>
-                          <small className="d-block text-muted">
-                            {getClientAddress(report)}
-                          </small>
-                        </td>
-
-                        <td>
-                          <span>{formatValue(report.client_email)}</span>
-                          <small className="d-block text-muted">
-                            {formatValue(report.client_phone)}
-                          </small>
-                        </td>
-
-                        <td>
-                          <span>{formatValue(report.service_type)}</span>
-                          <small className="d-block text-muted">
-                            {formatDate(report.job_date)}
-                          </small>
-                        </td>
-
-                        <td>{renderStatusControl(report)}</td>
-
-                        <td className="text-end">
-                          <div className="d-flex justify-content-end gap-2 flex-wrap">
-                            {renderShareActions(report, "sm")}
-
-                            <Link
-                              to={`/reports/${report.id}`}
-                              className="btn btn-sm btn-outline-primary"
-                            >
-                              View
-                            </Link>
-
-                            {editable && (
-                              <Link
-                                to={`/edit-report/${report.id}`}
-                                className="btn btn-sm btn-outline-secondary"
-                              >
-                                Edit
-                              </Link>
-                            )}
-
-                            {!editable &&
-                              profile?.role === "worker" &&
-                              report.status === "completed" && (
-                                <span className="btn btn-sm btn-outline-secondary disabled">
-                                  Locked
-                                </span>
-                              )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div className="jp-reports-filters">
+              {["all", "pending", "checked", "completed"].map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  className={
+                    statusFilter === filter
+                      ? "jp-reports-filter active"
+                      : "jp-reports-filter"
+                  }
+                  onClick={() => setStatusFilter(filter)}
+                >
+                  {filter === "all" ? "All" : getStatusLabel(filter)}
+                </button>
+              ))}
             </div>
           </div>
 
-          <div className="reports-mobile-list">
-            {filteredReports.map((report) => {
-              const editable = canEditReport({ report, profile, user });
-              const status = report.status || "pending";
+          {filteredReports.length === 0 ? (
+            <div className="jp-reports-empty">
+              <div>
+                <h3>No reports found</h3>
 
-              return (
-                <article className="reports-mobile-card" key={report.id}>
-                  <div className="d-flex justify-content-between align-items-start gap-3 mb-3">
-                    <div>
-                      <p className="eyebrow mb-1">{report.report_number}</p>
+                <p>
+                  Create a new report or adjust your search and filters to see
+                  more records.
+                </p>
 
-                      <h2 className="h5 mb-1">{getClientName(report)}</h2>
+                <Link to="/create-report" className="btn btn-primary">
+                  Create Report
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div className="jp-reports-list">
+              {filteredReports.map((report) => {
+                const reportStatus = report.status || "pending";
 
-                      <p className="text-muted mb-0">
-                        {getClientAddress(report)}
-                      </p>
-                    </div>
+                return (
+                  <article className="jp-report-card" key={report.id}>
+                    <div className="jp-report-card-main">
+                      <div>
+                        <h3>{report.report_number || "No report number"}</h3>
 
-                    <span className={`report-status-badge ${status}`}>
-                      {formatStatusLabel(status)}
-                    </span>
-                  </div>
-
-                  <div className="reports-mobile-details">
-                    <div>
-                      <span>Service</span>
-                      <strong>{formatValue(report.service_type)}</strong>
-                    </div>
-
-                    <div>
-                      <span>Job date</span>
-                      <strong>{formatDate(report.job_date)}</strong>
-                    </div>
-
-                    <div>
-                      <span>Email</span>
-                      <strong>{formatValue(report.client_email)}</strong>
-                    </div>
-
-                    <div>
-                      <span>Phone</span>
-                      <strong>{formatValue(report.client_phone)}</strong>
-                    </div>
-                  </div>
-
-                  {canUpdateStatus && (
-                    <div className="mt-3">{renderStatusControl(report)}</div>
-                  )}
-
-                  <div className="d-flex gap-2 flex-wrap mt-3">
-                    {renderShareActions(report, "sm")}
-
-                    <Link
-                      to={`/reports/${report.id}`}
-                      className="btn btn-sm btn-outline-primary"
-                    >
-                      View
-                    </Link>
-
-                    {editable && (
-                      <Link
-                        to={`/edit-report/${report.id}`}
-                        className="btn btn-sm btn-outline-secondary"
-                      >
-                        Edit
-                      </Link>
-                    )}
-
-                    {!editable &&
-                      profile?.role === "worker" &&
-                      report.status === "completed" && (
-                        <span className="btn btn-sm btn-outline-secondary disabled">
-                          Locked
+                        <span className="jp-report-client">
+                          {report.client_display_name ||
+                            report.client_name ||
+                            "Client not provided"}
                         </span>
-                      )}
-                  </div>
+                      </div>
 
-                  {report.status === "completed" && !report.client_email && (
-                    <p className="text-warning small mt-3 mb-0">
-                      Completed report without client email.
-                    </p>
-                  )}
+                      <span
+                        className={`jp-report-status ${getStatusClass(
+                          reportStatus
+                        )}`}
+                      >
+                        {getStatusLabel(reportStatus)}
+                      </span>
+                    </div>
 
-                  {isAdminOrSupervisor &&
-                    report.status === "completed" &&
-                    report.client_email &&
-                    !report.public_share_enabled && (
-                      <p className="text-muted small mt-3 mb-0">
-                        Enable sharing before sending the client link.
-                      </p>
-                    )}
+                    <div className="jp-report-details-grid">
+                      <div className="jp-report-detail">
+                        <span>Service</span>
+                        <strong>{report.service_type || "Not provided"}</strong>
+                      </div>
 
-                  {profile?.role === "worker" &&
-                    report.status === "completed" && (
-                      <p className="text-muted small mt-3 mb-0">
-                        This report is completed and locked for workers.
-                      </p>
-                    )}
-                </article>
-              );
-            })}
-          </div>
-        </>
-      )}
-    </section>
+                      <div className="jp-report-detail">
+                        <span>Job date</span>
+                        <strong>{formatDate(report.job_date)}</strong>
+                      </div>
+
+                      <div className="jp-report-detail">
+                        <span>Total hours</span>
+                        <strong>{report.total_hours || "Not provided"}</strong>
+                      </div>
+
+                      <div className="jp-report-detail">
+                        <span>Updated</span>
+                        <strong>{formatDateTime(report.updated_at)}</strong>
+                      </div>
+
+                      <div className="jp-report-detail">
+                        <span>Address</span>
+                        <strong>
+                          {report.job_address ||
+                            report.client_address_snapshot ||
+                            "Not provided"}
+                        </strong>
+                      </div>
+
+                      <div className="jp-report-detail">
+                        <span>Contact</span>
+                        <strong>
+                          {report.client_contact_person || "Not provided"}
+                        </strong>
+                      </div>
+
+                      <div className="jp-report-detail">
+                        <span>Email</span>
+                        <strong>{report.client_email || "Not provided"}</strong>
+                      </div>
+
+                      <div className="jp-report-detail">
+                        <span>Phone</span>
+                        <strong>{report.client_phone || "Not provided"}</strong>
+                      </div>
+                    </div>
+
+                    <div className="jp-report-card-actions">
+                      <div className="jp-report-card-actions-left">
+                        <Link
+                          to={`/reports/${report.id}`}
+                          className="btn btn-sm btn-outline-primary"
+                        >
+                          View
+                        </Link>
+
+                        {canEditReport(report) && (
+                          <Link
+                            to={`/edit-report/${report.id}`}
+                            className="btn btn-sm btn-primary"
+                          >
+                            Edit
+                          </Link>
+                        )}
+
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-secondary"
+                          onClick={() => handleCopyReportSummary(report)}
+                        >
+                          Copy Summary
+                        </button>
+                      </div>
+
+                      <div className="jp-report-card-actions-right">
+                        {canManageReports && (
+                          <select
+                            className="jp-report-status-select"
+                            value={reportStatus}
+                            onChange={(event) =>
+                              handleUpdateStatus(report, event.target.value)
+                            }
+                            disabled={updatingReportId === report.id}
+                          >
+                            {STATUS_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </section>
+    </>
   );
 };
 
