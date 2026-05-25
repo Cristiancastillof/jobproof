@@ -124,7 +124,6 @@ const Navbar = () => {
             color: #ffffff;
             background: linear-gradient(135deg, #1e40af, #0f172a);
             box-shadow: 0 12px 24px rgba(30, 64, 175, 0.28);
-            position: relative;
           }
 
           .jp2-brand-check {
@@ -530,14 +529,6 @@ const Navbar = () => {
                 <>
                   <NavLink to="/" className={getNavLinkClass} end>
                     Home
-                  </NavLink>
-
-                  <NavLink to="/login" className={getNavLinkClass}>
-                    Log in
-                  </NavLink>
-
-                  <NavLink to="/register" className={getNavLinkClass}>
-                    Register
                   </NavLink>
                 </>
               )}
