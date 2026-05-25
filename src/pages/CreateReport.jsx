@@ -324,6 +324,49 @@ const getRoleOnJob = (member, creatorId) => {
   return "worker";
 };
 
+const PreviewModal = ({ reportData, onClose, onDownloadPDF }) => {
+  if (!reportData) return null;
+
+  return (
+    <div className="cr-preview-backdrop" role="dialog" aria-modal="true">
+      <div className="cr-preview-modal">
+        <div className="cr-preview-header">
+          <div>
+            <span>Report preview</span>
+            <h2>{reportData.reportNumber || "Job report"}</h2>
+          </div>
+
+          <button type="button" className="cr-preview-close" onClick={onClose}>
+            ×
+          </button>
+        </div>
+
+        <div className="cr-preview-body">
+          <ReportPreview reportData={reportData} />
+        </div>
+
+        <div className="cr-preview-footer">
+          <button
+            type="button"
+            className="btn btn-outline-secondary"
+            onClick={onClose}
+          >
+            Close
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-success"
+            onClick={onDownloadPDF}
+          >
+            Download PDF
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const CreateReport = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -344,6 +387,7 @@ const CreateReport = () => {
   const [loadingReport, setLoadingReport] = useState(true);
   const [savingReport, setSavingReport] = useState(false);
   const [message, setMessage] = useState(null);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
 
   const isWorker = profile?.role === "worker";
   const isCompletedReport = reportData?.status === "completed";
@@ -592,6 +636,10 @@ const CreateReport = () => {
               type: "success",
               text: `${selectedClientFromUrl.client_display_name} was loaded into this report.`,
             });
+
+            const nextSearchParams = new URLSearchParams(searchParams);
+            nextSearchParams.delete("clientId");
+            setSearchParams(nextSearchParams, { replace: true });
           }
         }
       } catch (error) {
@@ -1150,33 +1198,219 @@ const CreateReport = () => {
   }
 
   return (
-    <section>
-      <div className="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
-        <div>
-          <p className="eyebrow mb-2">
-            {isEditMode ? "Edit report" : "Create report"}
-          </p>
+    <>
+      <style>
+        {`
+          .cr-preview-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 3000;
+            display: grid;
+            place-items: center;
+            padding: 18px;
+            background: rgba(15, 23, 42, 0.72);
+            backdrop-filter: blur(10px);
+          }
 
-          <h1 className="section-title mb-2">
-            {isEditMode ? "Update job report" : "Create a new job report"}
-          </h1>
+          .cr-preview-modal {
+            width: min(1120px, 100%);
+            max-height: 92vh;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr) auto;
+            overflow: hidden;
+            border-radius: 28px;
+            background: #f8fafc;
+            box-shadow: 0 28px 80px rgba(0, 0, 0, 0.34);
+          }
 
-          <p className="section-subtitle mb-0">
-            Company details are loaded automatically from your Business Profile.
-          </p>
+          .cr-preview-header,
+          .cr-preview-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            padding: 18px 22px;
+            background: #ffffff;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+          }
+
+          .cr-preview-footer {
+            border-top: 1px solid rgba(15, 23, 42, 0.08);
+            border-bottom: 0;
+          }
+
+          .cr-preview-header span {
+            display: block;
+            color: #64748b;
+            font-size: 0.72rem;
+            font-weight: 950;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+          }
+
+          .cr-preview-header h2 {
+            margin: 4px 0 0;
+            color: #0f172a;
+            font-size: 1.15rem;
+            font-weight: 950;
+          }
+
+          .cr-preview-close {
+            width: 42px;
+            height: 42px;
+            border: 0;
+            border-radius: 14px;
+            background: #f1f5f9;
+            color: #0f172a;
+            font-size: 1.8rem;
+            line-height: 1;
+            font-weight: 700;
+          }
+
+          .cr-preview-body {
+            overflow: auto;
+            padding: 18px;
+          }
+
+          .cr-preview-body .report-preview {
+            margin: 0 auto;
+          }
+
+          @media (max-width: 576px) {
+            .desktop-report-actions {
+              display: none !important;
+            }
+
+            .cr-preview-modal {
+              max-height: 94vh;
+              border-radius: 22px;
+            }
+
+            .cr-preview-header,
+            .cr-preview-footer {
+              flex-direction: column;
+              align-items: flex-start;
+            }
+
+            .cr-preview-footer .btn {
+              width: 100%;
+            }
+          }
+        `}
+      </style>
+
+      <section>
+        <div className="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+          <div>
+            <p className="eyebrow mb-2">
+              {isEditMode ? "Edit report" : "Create report"}
+            </p>
+
+            <h1 className="section-title mb-2">
+              {isEditMode ? "Update job report" : "Create a new job report"}
+            </h1>
+
+            <p className="section-subtitle mb-0">
+              Company details are loaded automatically from your Business Profile.
+            </p>
+          </div>
+
+          <div className="desktop-report-actions d-flex gap-2 flex-wrap">
+            <button
+              className="btn btn-primary"
+              onClick={handleSaveReport}
+              disabled={savingReport || workerCannotEditCompletedReport}
+            >
+              {savingReport
+                ? "Saving..."
+                : isEditMode
+                ? "Update Report"
+                : "Save Report"}
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-outline-primary"
+              onClick={() => setShowPreviewModal(true)}
+              disabled={savingReport}
+            >
+              Preview Report
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-success"
+              onClick={handleDownloadPDF}
+              disabled={savingReport}
+            >
+              Download PDF
+            </button>
+
+            <button
+              className="btn btn-outline-danger"
+              onClick={handleClearForm}
+              disabled={savingReport}
+            >
+              Clear Form
+            </button>
+          </div>
         </div>
 
-        <div className="desktop-report-actions d-flex gap-2 flex-wrap">
+        {message && (
+          <div className={`alert alert-${message.type}`} role="alert">
+            {message.text}
+          </div>
+        )}
+
+        {message && (
+          <div
+            className={`alert alert-${message.type} mobile-save-message d-lg-none`}
+            role="alert"
+          >
+            {message.text}
+          </div>
+        )}
+
+        {workerCannotEditCompletedReport && (
+          <div className="alert alert-warning" role="alert">
+            This report is completed. Workers can view it, but only supervisors or
+            admins can edit completed reports.
+          </div>
+        )}
+
+        <div className="row g-4">
+          <div className="col-12">
+            <ReportForm
+              reportData={reportData}
+              setReportData={setReportData}
+              photoFiles={photoFiles}
+              setPhotoFiles={setPhotoFiles}
+              teamMembers={teamMembers}
+              selectedWorkerIds={selectedWorkerIds}
+              setSelectedWorkerIds={setSelectedWorkerIds}
+              statusOptions={statusOptions}
+              clients={clients}
+              onSelectClient={handleSelectClient}
+            />
+          </div>
+        </div>
+
+        <div className="mobile-report-action-bar">
           <button
             className="btn btn-primary"
             onClick={handleSaveReport}
             disabled={savingReport || workerCannotEditCompletedReport}
           >
-            {savingReport
-              ? "Saving..."
-              : isEditMode
-              ? "Update Report"
-              : "Save Report"}
+            {savingReport ? "Saving..." : isEditMode ? "Update" : "Save"}
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-outline-primary"
+            onClick={() => setShowPreviewModal(true)}
+            disabled={savingReport}
+          >
+            Preview
           </button>
 
           <button
@@ -1184,80 +1418,19 @@ const CreateReport = () => {
             onClick={handleDownloadPDF}
             disabled={savingReport}
           >
-            Download PDF
-          </button>
-
-          <button
-            className="btn btn-outline-danger"
-            onClick={handleClearForm}
-            disabled={savingReport}
-          >
-            Clear Form
+            PDF
           </button>
         </div>
-      </div>
 
-      {message && (
-        <div className={`alert alert-${message.type}`} role="alert">
-          {message.text}
-        </div>
-      )}
-
-      {message && (
-        <div
-          className={`alert alert-${message.type} mobile-save-message d-lg-none`}
-          role="alert"
-        >
-          {message.text}
-        </div>
-      )}
-
-      {workerCannotEditCompletedReport && (
-        <div className="alert alert-warning" role="alert">
-          This report is completed. Workers can view it, but only supervisors or
-          admins can edit completed reports.
-        </div>
-      )}
-
-      <div className="row g-4">
-        <div className="col-lg-7">
-          <ReportForm
+        {showPreviewModal && (
+          <PreviewModal
             reportData={reportData}
-            setReportData={setReportData}
-            photoFiles={photoFiles}
-            setPhotoFiles={setPhotoFiles}
-            teamMembers={teamMembers}
-            selectedWorkerIds={selectedWorkerIds}
-            setSelectedWorkerIds={setSelectedWorkerIds}
-            statusOptions={statusOptions}
-            clients={clients}
-            onSelectClient={handleSelectClient}
+            onClose={() => setShowPreviewModal(false)}
+            onDownloadPDF={handleDownloadPDF}
           />
-        </div>
-
-        <div className="col-lg-5">
-          <ReportPreview reportData={reportData} />
-        </div>
-      </div>
-
-      <div className="mobile-report-action-bar">
-        <button
-          className="btn btn-primary"
-          onClick={handleSaveReport}
-          disabled={savingReport || workerCannotEditCompletedReport}
-        >
-          {savingReport ? "Saving..." : isEditMode ? "Update" : "Save"}
-        </button>
-
-        <button
-          className="btn btn-success"
-          onClick={handleDownloadPDF}
-          disabled={savingReport}
-        >
-          PDF
-        </button>
-      </div>
-    </section>
+        )}
+      </section>
+    </>
   );
 };
 
