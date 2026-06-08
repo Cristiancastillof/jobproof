@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
+import {
+  getLimitLabel,
+  getPrimaryBillingBlockReason,
+  loadBillingPermissions,
+} from "../utils/billingLimits";
 
 const createEmptyClientForm = () => ({
   clientDisplayName: "",
@@ -120,9 +125,28 @@ const Clients = () => {
   const [savingClient, setSavingClient] = useState(false);
   const [updatingClientId, setUpdatingClientId] = useState(null);
   const [message, setMessage] = useState(null);
+  const [billingPermissions, setBillingPermissions] = useState(null);
+  const [loadingBilling, setLoadingBilling] = useState(true);
 
   const canManageClients =
     profile?.role === "admin" || profile?.role === "supervisor";
+
+  const clientCreationBlocked =
+    !editingClientId &&
+    Boolean(billingPermissions) &&
+    !billingPermissions.canCreateClient;
+
+  const clientLimitLabel = billingPermissions
+    ? getLimitLabel(
+        billingPermissions.clientsUsed,
+        billingPermissions.plan.clientsLimit,
+        "clients"
+      )
+    : "Loading usage";
+
+  const clientBlockReason = billingPermissions
+    ? getPrimaryBillingBlockReason(billingPermissions, "clients")
+    : "Billing information is still loading.";
 
   const filteredClients = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -177,6 +201,56 @@ const Clients = () => {
   const jobSitesCount = useMemo(() => {
     return clients.filter((client) => client.client_type === "site").length;
   }, [clients]);
+
+  const loadBillingState = async () => {
+    if (!profile?.company_id || !canManageClients) {
+      setLoadingBilling(false);
+      setBillingPermissions(null);
+      return;
+    }
+
+    setLoadingBilling(true);
+
+    try {
+      const { data: company, error } = await supabase
+        .from("companies")
+        .select(
+          `
+          id,
+          plan_key,
+          subscription_status,
+          trial_started_at,
+          trial_ends_at,
+          stripe_customer_id,
+          stripe_subscription_id,
+          billing_email,
+          billing_updated_at
+        `
+        )
+        .eq("id", profile.company_id)
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      const permissions = await loadBillingPermissions(company);
+
+      setBillingPermissions(permissions);
+    } catch (error) {
+      console.error("Error loading billing permissions:", error);
+
+      setBillingPermissions(null);
+      setMessage({
+        type: "warning",
+        text:
+          error.message ||
+          "Billing limits could not be loaded. Please refresh the page.",
+      });
+    } finally {
+      setLoadingBilling(false);
+    }
+  };
 
   const loadClients = async () => {
     if (!profile?.company_id || !canManageClients) {
@@ -243,6 +317,7 @@ const Clients = () => {
     }
 
     loadClients();
+    loadBillingState();
   }, [user, profile, profileLoading]);
 
   const handleChange = (event) => {
@@ -273,6 +348,22 @@ const Clients = () => {
       setMessage({
         type: "warning",
         text: "Only admins and supervisors can manage clients.",
+      });
+      return;
+    }
+
+    if (!editingClientId && loadingBilling) {
+      setMessage({
+        type: "warning",
+        text: "Billing limits are still loading. Please try again in a moment.",
+      });
+      return;
+    }
+
+    if (!editingClientId && clientCreationBlocked) {
+      setMessage({
+        type: "warning",
+        text: clientBlockReason,
       });
       return;
     }
@@ -388,6 +479,8 @@ const Clients = () => {
         });
       }
 
+      await loadBillingState();
+
       setFormData(createEmptyClientForm());
       setEditingClientId(null);
     } catch (error) {
@@ -483,7 +576,7 @@ const Clients = () => {
     }
   };
 
-  if (profileLoading || loadingClients) {
+  if (profileLoading || loadingClients || loadingBilling) {
     return (
       <section className="py-5 text-center">
         <div className="spinner-border text-primary mb-3" role="status">
@@ -1063,9 +1156,15 @@ const Clients = () => {
           </div>
 
           <div className="jp-clients-hero-actions">
-            <a href="#client-form" className="btn btn-light">
-              Add Client
-            </a>
+            {clientCreationBlocked ? (
+              <Link to="/billing" className="btn btn-light">
+                Upgrade Plan
+              </Link>
+            ) : (
+              <a href="#client-form" className="btn btn-light">
+                Add Client
+              </a>
+            )}
 
             <Link to="/create-report" className="btn btn-outline-light">
               Create Report
@@ -1084,6 +1183,13 @@ const Clients = () => {
             label="Total clients"
             value={clients.length}
             helper="All saved client records"
+          />
+
+          <StatCard
+            label="Plan usage"
+            value={clientLimitLabel}
+            helper="Current client allowance"
+            tone={clientCreationBlocked ? "amber" : "blue"}
           />
 
           <StatCard
@@ -1122,6 +1228,22 @@ const Clients = () => {
                 fewer manual entry errors.
               </p>
             </div>
+
+            {clientCreationBlocked && (
+              <div className="jp-client-limit-notice">
+                <div>
+                  <strong>Client limit reached</strong>
+                  <p>{clientBlockReason}</p>
+                  <p>Current usage: {clientLimitLabel}</p>
+                </div>
+
+                <div className="jp-client-limit-actions">
+                  <Link to="/billing" className="btn btn-warning btn-sm">
+                    Go to Billing
+                  </Link>
+                </div>
+              </div>
+            )}
 
             <div className="jp-client-form-grid">
               <div>
@@ -1379,10 +1501,12 @@ const Clients = () => {
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  disabled={savingClient}
+                  disabled={savingClient || clientCreationBlocked}
                 >
                   {savingClient
                     ? "Saving..."
+                    : clientCreationBlocked
+                    ? "Upgrade Required"
                     : editingClientId
                     ? "Update Client"
                     : "Save Client"}

@@ -4,6 +4,7 @@ import Footer from "./components/Footer";
 import ProtectedRoute from "./components/ProtectedRoute";
 import PublicRoute from "./components/PublicRoute";
 import { useAuth } from "./context/AuthContext";
+
 import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
 import CreateReport from "./pages/CreateReport";
@@ -15,6 +16,7 @@ import Register from "./pages/Register";
 import Team from "./pages/Team";
 import Clients from "./pages/Clients";
 import PublicReport from "./pages/PublicReport";
+import Billing from "./pages/Billing";
 
 const HomeRoute = () => {
   const { isAuthenticated, authLoading } = useAuth();
@@ -23,7 +25,7 @@ const HomeRoute = () => {
     return (
       <section className="py-5 text-center">
         <div className="spinner-border text-primary mb-3" role="status">
-          <span className="visually-hidden">Loading...</span>
+          <span className="visually-hidden">Loading</span>
         </div>
         <h1 className="h5">Loading JobProof</h1>
       </section>
@@ -121,6 +123,15 @@ const App = () => {
             element={
               <ProtectedRoute>
                 <Team />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/billing"
+            element={
+              <ProtectedRoute>
+                <Billing />
               </ProtectedRoute>
             }
           />

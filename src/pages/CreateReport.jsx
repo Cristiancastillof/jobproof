@@ -6,6 +6,10 @@ import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 import { calculateTotalHours } from "../utils/calculateTotalHours";
 import { generatePDF } from "../utils/generatePDF";
+import {
+  getPrimaryBillingBlockReason,
+  loadBillingPermissions,
+} from "../utils/billingLimits";
 import { recordReportActivity } from "../utils/reportActivity";
 
 const LOCAL_REPORTS_KEY = "jobproofReports";
@@ -388,14 +392,26 @@ const CreateReport = () => {
   const [savingReport, setSavingReport] = useState(false);
   const [message, setMessage] = useState(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [billingPermissions, setBillingPermissions] = useState(null);
 
   const isWorker = profile?.role === "worker";
   const isCompletedReport = reportData?.status === "completed";
   const workerCannotEditCompletedReport = isWorker && isCompletedReport;
 
-  const canCreateReport = useMemo(() => {
+  const hasReportWorkspaceAccess = useMemo(() => {
     return Boolean(user?.id && profile?.company_id);
   }, [user, profile]);
+
+  const shouldBlockNewReportByBilling = Boolean(
+    !isEditMode && billingPermissions && !billingPermissions.canCreateReport
+  );
+
+  const billingBlockMessage = shouldBlockNewReportByBilling
+    ? getPrimaryBillingBlockReason(billingPermissions, "reports")
+    : "";
+
+  const saveButtonDisabled =
+    savingReport || workerCannotEditCompletedReport || shouldBlockNewReportByBilling;
 
   const normalizeSelectedWorkerIds = (workerIds = []) => {
     const uniqueIds = Array.from(new Set(workerIds.filter(Boolean)));
@@ -470,7 +486,21 @@ const CreateReport = () => {
         const { data: companyData, error: companyError } = await supabase
           .from("companies")
           .select(
-            "id, business_name, business_email, business_phone, business_logo_url"
+            `
+            id,
+            business_name,
+            business_email,
+            business_phone,
+            business_logo_url,
+            plan_key,
+            subscription_status,
+            trial_started_at,
+            trial_ends_at,
+            stripe_customer_id,
+            stripe_subscription_id,
+            billing_email,
+            billing_updated_at
+          `
           )
           .eq("id", profile.company_id)
           .single();
@@ -480,6 +510,9 @@ const CreateReport = () => {
         }
 
         setCompany(companyData);
+
+        const loadedBillingPermissions = await loadBillingPermissions(companyData);
+        setBillingPermissions(loadedBillingPermissions);
 
         const { data: membersData, error: membersError } = await supabase
           .from("profiles")
@@ -913,10 +946,18 @@ const CreateReport = () => {
       return;
     }
 
-    if (!canCreateReport) {
+    if (!hasReportWorkspaceAccess) {
       setMessage({
         type: "warning",
         text: "Please complete your Business Profile before saving reports.",
+      });
+      return;
+    }
+
+    if (shouldBlockNewReportByBilling) {
+      setMessage({
+        type: "warning",
+        text: billingBlockMessage,
       });
       return;
     }
@@ -1096,7 +1137,7 @@ const CreateReport = () => {
 
     if (!confirmClear) return;
 
-    const reportNumber = canCreateReport
+    const reportNumber = hasReportWorkspaceAccess
       ? await generateReportNumber(profile.company_id)
       : "";
 
@@ -1319,7 +1360,7 @@ const CreateReport = () => {
             <button
               className="btn btn-primary"
               onClick={handleSaveReport}
-              disabled={savingReport || workerCannotEditCompletedReport}
+              disabled={saveButtonDisabled}
             >
               {savingReport
                 ? "Saving..."
@@ -1378,6 +1419,21 @@ const CreateReport = () => {
           </div>
         )}
 
+        {shouldBlockNewReportByBilling && (
+          <div className="alert alert-warning border-0 shadow-sm" role="alert">
+            <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+              <div>
+                <strong>Plan limit reached</strong>
+                <p className="mb-0 mt-1">{billingBlockMessage}</p>
+              </div>
+
+              <Link to="/billing" className="btn btn-primary">
+                Go to Billing
+              </Link>
+            </div>
+          </div>
+        )}
+
         <div className="row g-4">
           <div className="col-12">
             <ReportForm
@@ -1399,7 +1455,7 @@ const CreateReport = () => {
           <button
             className="btn btn-primary"
             onClick={handleSaveReport}
-            disabled={savingReport || workerCannotEditCompletedReport}
+            disabled={saveButtonDisabled}
           >
             {savingReport ? "Saving..." : isEditMode ? "Update" : "Save"}
           </button>

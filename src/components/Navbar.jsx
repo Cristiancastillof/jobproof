@@ -91,22 +91,24 @@ const Navbar = () => {
           }
 
           .jp2-navbar {
-            max-width: 1180px;
+            width: 100%;
+            max-width: 1440px;
             margin: 0 auto;
-            padding: 14px 18px;
+            padding: 12px 22px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 18px;
+            gap: 16px;
           }
 
           .jp2-brand {
             display: inline-flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
             color: #0f172a;
             text-decoration: none;
-            min-width: 0;
+            flex: 0 0 auto;
+            min-width: 185px;
           }
 
           .jp2-brand:hover {
@@ -144,21 +146,24 @@ const Navbar = () => {
             display: flex;
             flex-direction: column;
             line-height: 1.05;
+            min-width: 0;
           }
 
           .jp2-brand-text strong {
             font-size: 1rem;
             font-weight: 950;
             letter-spacing: -0.03em;
+            white-space: nowrap;
           }
 
           .jp2-brand-text small {
             margin-top: 3px;
             color: #64748b;
-            font-size: 0.72rem;
+            font-size: 0.68rem;
             font-weight: 800;
             text-transform: uppercase;
             letter-spacing: 0.08em;
+            white-space: nowrap;
           }
 
           .jp2-menu-toggle {
@@ -195,30 +200,33 @@ const Navbar = () => {
           }
 
           .jp2-nav-panel {
-            flex: 1;
+            flex: 1 1 auto;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 22px;
+            gap: 14px;
+            min-width: 0;
           }
 
           .jp2-nav-links {
+            flex: 1 1 auto;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 6px;
-            margin-left: auto;
+            gap: 4px;
+            min-width: 0;
           }
 
           .jp2-nav-link {
             display: inline-flex;
             align-items: center;
-            min-height: 38px;
-            padding: 8px 12px;
+            justify-content: center;
+            min-height: 36px;
+            padding: 8px 10px;
             border-radius: 999px;
             color: #475569;
             text-decoration: none;
-            font-size: 0.9rem;
+            font-size: 0.84rem;
             font-weight: 850;
             white-space: nowrap;
           }
@@ -234,16 +242,18 @@ const Navbar = () => {
           }
 
           .jp2-user-area {
+            flex: 0 0 auto;
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
           }
 
           .jp2-user-card {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 9px;
             min-width: 0;
+            max-width: 290px;
             padding: 7px 8px;
             border-radius: 18px;
             background: #ffffff;
@@ -274,9 +284,9 @@ const Navbar = () => {
           }
 
           .jp2-user-meta strong {
-            max-width: 150px;
+            max-width: 135px;
             color: #0f172a;
-            font-size: 0.84rem;
+            font-size: 0.82rem;
             font-weight: 900;
             white-space: nowrap;
             overflow: hidden;
@@ -284,10 +294,10 @@ const Navbar = () => {
           }
 
           .jp2-user-meta small {
-            max-width: 150px;
+            max-width: 135px;
             margin-top: 3px;
             color: #64748b;
-            font-size: 0.7rem;
+            font-size: 0.68rem;
             font-weight: 700;
             white-space: nowrap;
             overflow: hidden;
@@ -303,10 +313,11 @@ const Navbar = () => {
             color: #334155;
             background: #f1f5f9;
             border: 1px solid rgba(15, 23, 42, 0.08);
-            font-size: 0.68rem;
+            font-size: 0.66rem;
             font-weight: 950;
             text-transform: uppercase;
             letter-spacing: 0.06em;
+            white-space: nowrap;
           }
 
           .jp2-role-badge.admin {
@@ -328,10 +339,14 @@ const Navbar = () => {
           }
 
           .jp2-logout-btn {
+            min-width: 86px;
             min-height: 38px;
             border-radius: 999px;
-            font-size: 0.86rem;
+            font-size: 0.82rem;
             font-weight: 850;
+            white-space: nowrap;
+            padding-left: 14px;
+            padding-right: 14px;
           }
 
           .jp2-auth-actions {
@@ -343,11 +358,44 @@ const Navbar = () => {
           .jp2-auth-actions .btn {
             border-radius: 999px;
             font-weight: 850;
+            white-space: nowrap;
+          }
+
+          @media (max-width: 1200px) {
+            .jp2-navbar {
+              max-width: 100%;
+              padding-left: 16px;
+              padding-right: 16px;
+              gap: 12px;
+            }
+
+            .jp2-brand {
+              min-width: 165px;
+            }
+
+            .jp2-nav-link {
+              font-size: 0.8rem;
+              padding-left: 8px;
+              padding-right: 8px;
+            }
+
+            .jp2-user-card {
+              max-width: 245px;
+            }
+
+            .jp2-user-meta strong,
+            .jp2-user-meta small {
+              max-width: 105px;
+            }
           }
 
           @media (max-width: 991px) {
             .jp2-navbar {
               padding: 12px 14px;
+            }
+
+            .jp2-brand {
+              min-width: 0;
             }
 
             .jp2-menu-toggle {
@@ -392,6 +440,7 @@ const Navbar = () => {
               color: #334155;
               background: #f8fafc;
               border: 1px solid rgba(15, 23, 42, 0.06);
+              font-size: 0.9rem;
             }
 
             .jp2-nav-link.active {
@@ -410,6 +459,7 @@ const Navbar = () => {
 
             .jp2-user-card {
               width: 100%;
+              max-width: 100%;
               align-items: center;
               padding: 12px;
               border-radius: 18px;
@@ -521,6 +571,10 @@ const Navbar = () => {
                         className={getNavLinkClass}
                       >
                         Business Profile
+                      </NavLink>
+
+                      <NavLink to="/billing" className={getNavLinkClass}>
+                        Billing
                       </NavLink>
                     </>
                   )}
