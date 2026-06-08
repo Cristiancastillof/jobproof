@@ -8,6 +8,17 @@ import App from "./App.jsx";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import { registerServiceWorker } from "./registerServiceWorker";
 
+Array.from(document.body.childNodes).forEach((node) => {
+  const text = node.textContent?.trim();
+
+  if (
+    node.nodeType === Node.TEXT_NODE &&
+    (text === "<" || text === "/>" || text === "</>")
+  ) {
+    node.remove();
+  }
+});
+
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <BrowserRouter>

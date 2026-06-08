@@ -5185,3 +5185,25 @@ textarea:focus::placeholder {
     border-radius: 13px;
   }
 }
+body::before,
+body::after,
+.app-container::before,
+.app-container::after {
+  content: none !important;
+}
+/* Remove stray decorative code symbol from page layout */
+html::before,
+html::after,
+body::before,
+body::after,
+#root::before,
+#root::after,
+.app-container::before,
+.app-container::after,
+main::before,
+main::after,
+.container::before,
+.container::after {
+  content: none !important;
+  display: none !important;
+}
