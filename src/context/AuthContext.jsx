@@ -1,4 +1,11 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { supabase } from "../lib/supabaseClient";
 
 const AuthContext = createContext(null);
@@ -23,14 +30,34 @@ const getRoleLabel = (profile) => {
   return roleLabels[profile.role] || "User";
 };
 
+const COMPANY_FIELDS = `
+  id,
+  owner_id,
+  business_name,
+  business_email,
+  business_phone,
+  business_logo_url,
+  plan_key,
+  subscription_status,
+  trial_started_at,
+  trial_ends_at,
+  stripe_customer_id,
+  stripe_subscription_id,
+  billing_email,
+  billing_updated_at,
+  created_at,
+  updated_at
+`;
+
 export const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
+  const [currentCompany, setCurrentCompany] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
 
-  const createMissingAdminProfile = async (currentUser) => {
+  const createMissingAdminProfile = useCallback(async (currentUser) => {
     const fullName =
       currentUser?.user_metadata?.full_name ||
       currentUser?.email?.split("@")[0] ||
@@ -48,11 +75,32 @@ export const AuthProvider = ({ children }) => {
     }
 
     return data;
-  };
+  }, []);
 
-  const fetchProfile = async (currentUser = user) => {
+  const fetchCompany = useCallback(async (companyId) => {
+    if (!companyId) {
+      setCurrentCompany(null);
+      return null;
+    }
+
+    const { data, error } = await supabase
+      .from("companies")
+      .select(COMPANY_FIELDS)
+      .eq("id", companyId)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    setCurrentCompany(data || null);
+    return data || null;
+  }, []);
+
+  const fetchProfile = useCallback(async (currentUser = user) => {
     if (!currentUser?.id) {
       setProfile(null);
+      setCurrentCompany(null);
       setProfileLoading(false);
       return null;
     }
@@ -84,20 +132,23 @@ export const AuthProvider = ({ children }) => {
       if (!data) {
         const createdProfile = await createMissingAdminProfile(currentUser);
         setProfile(createdProfile);
+        await fetchCompany(createdProfile?.company_id);
         return createdProfile;
       }
 
       setProfile(data);
+      await fetchCompany(data.company_id);
       return data;
     } catch (error) {
       console.error("Error loading user profile:", error);
 
       setProfile(null);
+      setCurrentCompany(null);
       return null;
     } finally {
       setProfileLoading(false);
     }
-  };
+  }, [createMissingAdminProfile, fetchCompany, user]);
 
   useEffect(() => {
     let isMounted = true;
@@ -126,6 +177,7 @@ export const AuthProvider = ({ children }) => {
           setSession(null);
           setUser(null);
           setProfile(null);
+          setCurrentCompany(null);
         }
       } finally {
         if (isMounted) {
@@ -147,6 +199,7 @@ export const AuthProvider = ({ children }) => {
 
       if (!currentUser) {
         setProfile(null);
+        setCurrentCompany(null);
         setProfileLoading(false);
       }
     });
@@ -162,12 +215,13 @@ export const AuthProvider = ({ children }) => {
 
     if (!user?.id) {
       setProfile(null);
+      setCurrentCompany(null);
       setProfileLoading(false);
       return;
     }
 
     fetchProfile(user);
-  }, [authLoading, user?.id]);
+  }, [authLoading, fetchProfile, user]);
 
   const signOut = async () => {
     const { error } = await supabase.auth.signOut();
@@ -179,26 +233,46 @@ export const AuthProvider = ({ children }) => {
     setSession(null);
     setUser(null);
     setProfile(null);
+    setCurrentCompany(null);
     setProfileLoading(false);
   };
 
   const value = useMemo(() => {
     const displayName = getUserDisplayName(user, profile);
     const displayRole = getRoleLabel(profile);
+    const role = profile?.role || "";
+    const isAdmin = role === "admin";
+    const isSupervisor = role === "supervisor";
+    const isWorker = role === "worker";
 
     return {
       session,
       user,
       profile,
+      userProfile: profile,
+      currentCompany,
       authLoading,
       profileLoading,
       isAuthenticated: Boolean(session?.user),
+      isAdmin,
+      isSupervisor,
+      isWorker,
       displayName,
       displayRole,
+      fetchCompany,
       fetchProfile,
       signOut,
     };
-  }, [session, user, profile, authLoading, profileLoading]);
+  }, [
+    session,
+    user,
+    profile,
+    currentCompany,
+    authLoading,
+    profileLoading,
+    fetchCompany,
+    fetchProfile,
+  ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

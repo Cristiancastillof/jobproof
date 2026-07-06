@@ -188,10 +188,6 @@ const Clients = () => {
     return clients.filter((client) => client.active).length;
   }, [clients]);
 
-  const inactiveClientsCount = useMemo(() => {
-    return clients.filter((client) => !client.active).length;
-  }, [clients]);
-
   const companyClientsCount = useMemo(() => {
     return clients.filter((client) =>
       ["company", "property_manager", "agency"].includes(client.client_type)

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { calculateTotalHours } from "../utils/calculateTotalHours";
 
 const MAX_PHOTOS_PER_GROUP = 6;
@@ -165,7 +165,6 @@ const createFileFromCameraBlob = (blob) => {
 const ReportForm = ({
   reportData,
   setReportData,
-  photoFiles,
   setPhotoFiles,
   teamMembers = [],
   selectedWorkerIds = [],
@@ -185,13 +184,7 @@ const ReportForm = ({
     reportData.totalHours ||
     calculateTotalHours(reportData.startingHour, reportData.finishHour);
 
-  useEffect(() => {
-    return () => {
-      stopCamera();
-    };
-  }, []);
-
-  const stopCamera = () => {
+  const stopCamera = useCallback(() => {
     if (cameraStreamRef.current) {
       cameraStreamRef.current.getTracks().forEach((track) => track.stop());
       cameraStreamRef.current = null;
@@ -203,7 +196,13 @@ const ReportForm = ({
 
     setActiveCameraPhotoType(null);
     setIsCameraLoading(false);
-  };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, [stopCamera]);
 
   const addProcessedPhotosToState = ({ processedPhotos, photoType }) => {
     const previewUrls = processedPhotos.map((photo) => photo.previewUrl);

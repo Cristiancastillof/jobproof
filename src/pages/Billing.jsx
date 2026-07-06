@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import {
   JOBPROOF_PLANS,
@@ -9,10 +8,17 @@ import {
   getUsagePercentage,
   hasReachedLimit,
 } from "../config/plans";
+import { loadCompanyUsage } from "../utils/billingLimits";
 
 const Billing = () => {
-  const { user, profile, userProfile, currentCompany, isAdmin, isSupervisor } =
-    useAuth();
+  const {
+    session,
+    profile,
+    userProfile,
+    currentCompany,
+    isAdmin,
+    isSupervisor,
+  } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -69,6 +75,19 @@ const Billing = () => {
     currentPlan.clientsLimit
   );
 
+  const getAuthHeaders = () => {
+    const accessToken = session?.access_token;
+
+    if (!accessToken) {
+      throw new Error("Your session is not ready. Please log in again.");
+    }
+
+    return {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    };
+  };
+
   useEffect(() => {
     const loadUsage = async () => {
       if (!companyId) {
@@ -78,30 +97,22 @@ const Billing = () => {
 
       setLoading(true);
 
-      const [reportsResult, usersResult, clientsResult] = await Promise.all([
-        supabase
-          .from("reports")
-          .select("id", { count: "exact", head: true })
-          .eq("company_id", companyId),
+      try {
+        const usageState = await loadCompanyUsage(companyId);
 
-        supabase
-          .from("profiles")
-          .select("id", { count: "exact", head: true })
-          .eq("company_id", companyId),
-
-        supabase
-          .from("clients")
-          .select("id", { count: "exact", head: true })
-          .eq("company_id", companyId),
-      ]);
-
-      setUsage({
-        reports: reportsResult.count || 0,
-        users: usersResult.count || 0,
-        clients: clientsResult.count || 0,
-      });
-
-      setLoading(false);
+        setUsage({
+          reports: usageState.reportsUsed,
+          users: usageState.usersUsed,
+          clients: usageState.clientsUsed,
+        });
+      } catch (error) {
+        console.error("Billing usage error:", error);
+        setCheckoutError(
+          error.message || "Billing usage could not be loaded."
+        );
+      } finally {
+        setLoading(false);
+      }
     };
 
     loadUsage();
@@ -156,14 +167,10 @@ const Billing = () => {
 
       const response = await fetch("/api/create-checkout-session", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
-          priceId: selectedPlan.stripePriceId,
           planKey: selectedPlan.key,
           companyId,
-          customerEmail: user?.email || currentProfile?.email || "",
         }),
       });
 
@@ -198,9 +205,7 @@ const Billing = () => {
 
       const response = await fetch("/api/create-customer-portal-session", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           companyId,
         }),
@@ -221,7 +226,10 @@ const Billing = () => {
       window.location.href = data.url;
     } catch (error) {
       console.error("Customer portal error:", error);
-      alert("Stripe Customer Portal will be connected in the next backend step.");
+      setCheckoutError(
+        error.message ||
+          "Stripe Customer Portal could not be opened. Please try again."
+      );
     } finally {
       setCheckoutLoading(false);
     }
@@ -745,6 +753,12 @@ const Billing = () => {
                     Manage billing
                   </button>
                 </div>
+
+                {checkoutError && !selectedPlan && (
+                  <div className="jp-upgrade-error mt-4 mb-0">
+                    {checkoutError}
+                  </div>
+                )}
 
                 {(hasReachedLimit(
                   usage.reports,

@@ -1,6 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
 import Stripe from "stripe";
-import { JOBPROOF_PLANS } from "../src/config/plans.js";
 
 const createHttpError = (statusCode, message) => {
   const error = new Error(message);
@@ -81,7 +80,7 @@ const loadBillingContext = async (req, companyId) => {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("id, company_id, full_name, email, role, active")
+    .select("id, company_id, role, active")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -106,9 +105,7 @@ const loadBillingContext = async (req, companyId) => {
 
   const { data: company, error: companyError } = await supabase
     .from("companies")
-    .select(
-      "id, business_name, billing_email, stripe_customer_id, stripe_subscription_id"
-    )
+    .select("id, stripe_customer_id")
     .eq("id", companyId)
     .maybeSingle();
 
@@ -120,7 +117,7 @@ const loadBillingContext = async (req, companyId) => {
     throw createHttpError(404, "Company information was not found.");
   }
 
-  return { company, profile, user };
+  return { company };
 };
 
 export default async function handler(req, res) {
@@ -131,13 +128,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { planKey, companyId } = req.body || {};
-
-    if (!planKey || !JOBPROOF_PLANS[planKey]) {
-      return res.status(400).json({
-        error: "Invalid plan selected.",
-      });
-    }
+    const { companyId } = req.body || {};
 
     if (!companyId) {
       return res.status(400).json({
@@ -145,61 +136,33 @@ export default async function handler(req, res) {
       });
     }
 
-    const selectedPlan = JOBPROOF_PLANS[planKey];
+    const { company } = await loadBillingContext(req, companyId);
 
-    if (!selectedPlan.stripePriceId) {
+    if (!company.stripe_customer_id) {
       return res.status(400).json({
-        error: "This plan is not connected to Stripe yet.",
+        error:
+          "This company does not have a Stripe customer yet. Start checkout first.",
       });
     }
 
-    const { company, profile, user } = await loadBillingContext(req, companyId);
     const stripe = getStripe();
     const appUrl = getAppUrl();
 
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      line_items: [
-        {
-          price: selectedPlan.stripePriceId,
-          quantity: 1,
-        },
-      ],
-      customer: company.stripe_customer_id || undefined,
-      customer_email:
-        company.stripe_customer_id
-          ? undefined
-          : company.billing_email || profile.email || user.email || undefined,
-      client_reference_id: company.id,
-      success_url: `${appUrl}/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${appUrl}/billing?checkout=cancelled`,
-      allow_promotion_codes: true,
-      billing_address_collection: "auto",
-      automatic_tax: {
-        enabled: false,
-      },
-      subscription_data: {
-        metadata: {
-          companyId: company.id,
-          planKey,
-        },
-      },
-      metadata: {
-        companyId: company.id,
-        planKey,
-      },
+    const session = await stripe.billingPortal.sessions.create({
+      customer: company.stripe_customer_id,
+      return_url: `${appUrl}/billing`,
     });
 
     return res.status(200).json({
       url: session.url,
     });
   } catch (error) {
-    console.error("Stripe Checkout session error:", error);
+    console.error("Stripe Customer Portal session error:", error);
 
     return res.status(error.statusCode || 500).json({
       error:
         error.message ||
-        "Unable to create Stripe Checkout session. Please try again.",
+        "Unable to create Stripe Customer Portal session. Please try again.",
     });
   }
 }

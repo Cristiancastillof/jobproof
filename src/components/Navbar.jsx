@@ -45,6 +45,66 @@ const Navbar = () => {
   const isAdmin = role === "admin";
   const isSupervisor = role === "supervisor";
   const canManageWorkspace = isAdmin || isSupervisor;
+  const authenticatedNavLinks = [
+    {
+      to: "/",
+      label: "Dashboard",
+      mobileLabel: "Home",
+      icon: "H",
+      end: true,
+    },
+    {
+      to: "/reports",
+      label: "Reports",
+      mobileLabel: "Reports",
+      icon: "R",
+    },
+    {
+      to: "/create-report",
+      label: "Create Report",
+      mobileLabel: "Create",
+      icon: "+",
+      isCreate: true,
+    },
+    ...(canManageWorkspace
+      ? [
+          {
+            to: "/clients",
+            label: "Clients",
+            mobileLabel: "Clients",
+            icon: "C",
+          },
+          {
+            to: "/team",
+            label: "Team",
+            mobileLabel: "Team",
+            icon: "T",
+          },
+          {
+            to: "/business-profile",
+            label: "Business Profile",
+            mobileLabel: "Profile",
+            icon: "P",
+          },
+          {
+            to: "/billing",
+            label: "Billing",
+            mobileLabel: "Billing",
+            icon: "B",
+          },
+        ]
+      : []),
+  ];
+  const publicNavLinks = [
+    {
+      to: "/",
+      label: "Home",
+      mobileLabel: "Home",
+      icon: "H",
+      end: true,
+    },
+  ];
+  const navLinks = isAuthenticated ? authenticatedNavLinks : publicNavLinks;
 
   const userName =
     displayName ||
@@ -76,6 +136,20 @@ const Navbar = () => {
 
   const getNavLinkClass = ({ isActive }) =>
     isActive ? "jp2-nav-link active" : "jp2-nav-link";
+
+  const getMobileNavLinkClass = (link, isActive) => {
+    const classes = ["jp2-mobile-nav-link"];
+
+    if (link.isCreate) {
+      classes.push("create");
+    }
+
+    if (isActive) {
+      classes.push("active");
+    }
+
+    return classes.join(" ");
+  };
 
   return (
     <>
@@ -361,6 +435,148 @@ const Navbar = () => {
             white-space: nowrap;
           }
 
+          .jp2-mobile-nav-drawer {
+            display: none;
+          }
+
+          .jp2-mobile-nav-tab,
+          .jp2-mobile-nav-link {
+            -webkit-tap-highlight-color: transparent;
+          }
+
+          .jp2-mobile-nav-tab {
+            border: 0;
+            font: inherit;
+          }
+
+          .jp2-mobile-tab-grip {
+            width: 30px;
+            height: 4px;
+            border-radius: 999px;
+            background: currentColor;
+            opacity: 0.5;
+          }
+
+          .jp2-mobile-tab-label {
+            color: rgba(255, 255, 255, 0.78);
+            font-size: 0.72rem;
+            font-weight: 950;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+          }
+
+          .jp2-mobile-nav-panel {
+            width: 100%;
+            max-height: 0;
+            margin-top: 8px;
+            overflow: hidden;
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(18px) scale(0.98);
+            visibility: hidden;
+          }
+
+          .jp2-mobile-nav-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(62px, 1fr));
+            gap: 5px;
+          }
+
+          .jp2-mobile-nav-link {
+            min-width: 0;
+            min-height: 58px;
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            border-radius: 16px;
+            color: #64748b;
+            text-decoration: none;
+            font-size: 0.68rem;
+            font-weight: 950;
+            line-height: 1.05;
+            text-align: center;
+          }
+
+          .jp2-mobile-nav-link:hover {
+            color: #1e40af;
+          }
+
+          .jp2-mobile-nav-link.active {
+            color: #1e40af;
+            background: #eff6ff;
+          }
+
+          .jp2-mobile-nav-link.create {
+            position: relative;
+            top: -18px;
+            min-height: 70px;
+            color: #ffffff;
+            background: #1d4ed8;
+            box-shadow: 0 16px 28px rgba(29, 78, 216, 0.3);
+          }
+
+          .jp2-mobile-nav-link.create.active {
+            color: #ffffff;
+            background: #1d4ed8;
+          }
+
+          .jp2-mobile-nav-icon {
+            display: block;
+            font-size: 1.05rem;
+            line-height: 1;
+          }
+
+          .jp2-mobile-nav-link.create .jp2-mobile-nav-icon {
+            font-size: 1.45rem;
+          }
+
+          .jp2-mobile-account {
+            display: grid;
+            gap: 10px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(15, 23, 42, 0.08);
+          }
+
+          .jp2-mobile-user-card {
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            border-radius: 16px;
+            background: #f8fafc;
+            border: 1px solid rgba(15, 23, 42, 0.06);
+          }
+
+          .jp2-mobile-user-card .jp2-user-meta {
+            flex: 1 1 auto;
+          }
+
+          .jp2-mobile-logout {
+            width: 100%;
+            min-height: 42px;
+            border-radius: 14px;
+            font-weight: 900;
+          }
+
+          .jp2-mobile-auth-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(15, 23, 42, 0.08);
+          }
+
+          .jp2-mobile-auth-actions .btn {
+            min-height: 42px;
+            border-radius: 14px;
+            font-weight: 900;
+          }
+
           @media (max-width: 1200px) {
             .jp2-navbar {
               max-width: 100%;
@@ -495,6 +711,94 @@ const Navbar = () => {
               width: 100%;
               min-height: 44px;
             }
+
+            .app-container {
+              padding-bottom: calc(82px + env(safe-area-inset-bottom));
+            }
+
+            .jp2-menu-toggle {
+              display: none;
+            }
+
+            .jp2-nav-panel,
+            .jp2-nav-panel.open {
+              display: none;
+            }
+
+            .jp2-mobile-nav-drawer {
+              position: fixed;
+              left: max(12px, env(safe-area-inset-left));
+              right: max(12px, env(safe-area-inset-right));
+              bottom: max(12px, env(safe-area-inset-bottom));
+              z-index: 1050;
+              display: grid;
+              justify-items: center;
+              pointer-events: none;
+            }
+
+            .jp2-mobile-nav-tab {
+              width: min(176px, 58vw);
+              min-height: 46px;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              gap: 9px;
+              padding: 0 16px;
+              border: 1px solid rgba(15, 23, 42, 0.08);
+              border-radius: 999px;
+              color: #ffffff;
+              background: #0f172a;
+              box-shadow: 0 18px 38px rgba(15, 23, 42, 0.24);
+              pointer-events: auto;
+              transition:
+                width 180ms ease,
+                min-height 180ms ease,
+                border-radius 180ms ease,
+                background 180ms ease,
+                color 180ms ease,
+                transform 180ms ease;
+            }
+
+            .jp2-mobile-nav-panel {
+              padding: 0;
+              border: 1px solid rgba(217, 225, 236, 0.96);
+              border-radius: 22px;
+              background: rgba(255, 255, 255, 0.97);
+              box-shadow: 0 18px 44px rgba(15, 23, 42, 0.18);
+              backdrop-filter: blur(18px);
+              transition:
+                max-height 180ms ease,
+                opacity 180ms ease,
+                padding 180ms ease,
+                transform 180ms ease,
+                visibility 180ms ease;
+            }
+
+            .jp2-mobile-nav-drawer.open .jp2-mobile-nav-tab {
+              width: 118px;
+              min-height: 34px;
+              border-color: rgba(217, 225, 236, 0.96);
+              border-bottom-color: transparent;
+              border-radius: 16px 16px 8px 8px;
+              color: #1d4ed8;
+              background: rgba(255, 255, 255, 0.97);
+              box-shadow: 0 -6px 18px rgba(15, 23, 42, 0.08);
+              transform: translateY(9px);
+            }
+
+            .jp2-mobile-nav-drawer.open .jp2-mobile-tab-label {
+              color: #1d4ed8;
+            }
+
+            .jp2-mobile-nav-drawer.open .jp2-mobile-nav-panel {
+              max-height: min(74vh, 480px);
+              overflow: visible;
+              opacity: 1;
+              padding: 8px;
+              pointer-events: auto;
+              transform: translateY(0) scale(1);
+              visibility: visible;
+            }
           }
 
           @media (max-width: 380px) {
@@ -542,50 +846,17 @@ const Navbar = () => {
 
           <div className={isMenuOpen ? "jp2-nav-panel open" : "jp2-nav-panel"}>
             <div className="jp2-nav-links">
-              {isAuthenticated ? (
-                <>
-                  <NavLink to="/" className={getNavLinkClass} end>
-                    Dashboard
-                  </NavLink>
-
-                  <NavLink to="/reports" className={getNavLinkClass}>
-                    Reports
-                  </NavLink>
-
-                  <NavLink to="/create-report" className={getNavLinkClass}>
-                    Create Report
-                  </NavLink>
-
-                  {canManageWorkspace && (
-                    <>
-                      <NavLink to="/clients" className={getNavLinkClass}>
-                        Clients
-                      </NavLink>
-
-                      <NavLink to="/team" className={getNavLinkClass}>
-                        Team
-                      </NavLink>
-
-                      <NavLink
-                        to="/business-profile"
-                        className={getNavLinkClass}
-                      >
-                        Business Profile
-                      </NavLink>
-
-                      <NavLink to="/billing" className={getNavLinkClass}>
-                        Billing
-                      </NavLink>
-                    </>
-                  )}
-                </>
-              ) : (
-                <>
-                  <NavLink to="/" className={getNavLinkClass} end>
-                    Home
-                  </NavLink>
-                </>
-              )}
+              {navLinks.map((link) => (
+                <NavLink
+                  key={link.to}
+                  to={link.to}
+                  className={getNavLinkClass}
+                  end={link.end}
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  {link.label}
+                </NavLink>
+              ))}
             </div>
 
             {isAuthenticated ? (
@@ -626,6 +897,91 @@ const Navbar = () => {
           </div>
         </nav>
       </header>
+
+      <div
+        className={
+          isMenuOpen
+            ? "jp2-mobile-nav-drawer open"
+            : "jp2-mobile-nav-drawer"
+        }
+      >
+        <button
+          type="button"
+          className="jp2-mobile-nav-tab"
+          onClick={() => setIsMenuOpen((currentValue) => !currentValue)}
+          aria-label="Toggle navigation menu"
+          aria-expanded={isMenuOpen}
+          aria-controls="jp2-mobile-nav-panel"
+        >
+          <span className="jp2-mobile-tab-grip" aria-hidden="true" />
+          <span className="jp2-mobile-tab-label">MENU</span>
+        </button>
+
+        <div id="jp2-mobile-nav-panel" className="jp2-mobile-nav-panel">
+          <div className="jp2-mobile-nav-grid">
+            {navLinks.map((link) => (
+              <NavLink
+                key={link.to}
+                to={link.to}
+                end={link.end}
+                className={({ isActive }) =>
+                  getMobileNavLinkClass(link, isActive)
+                }
+                onClick={() => setIsMenuOpen(false)}
+              >
+                <span className="jp2-mobile-nav-icon" aria-hidden="true">
+                  {link.icon}
+                </span>
+                <span>{link.mobileLabel}</span>
+              </NavLink>
+            ))}
+          </div>
+
+          {isAuthenticated ? (
+            <div className="jp2-mobile-account">
+              <div className="jp2-mobile-user-card">
+                <div className="jp2-user-avatar">{getInitials(userName)}</div>
+
+                <div className="jp2-user-meta">
+                  <strong>{userName}</strong>
+                  {userEmail && <small>{userEmail}</small>}
+                </div>
+
+                <span className={`jp2-role-badge ${role || "user"}`}>
+                  {roleLabel}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                className="btn btn-outline-danger jp2-mobile-logout"
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+              >
+                {isLoggingOut ? "Logging out..." : "Log out"}
+              </button>
+            </div>
+          ) : (
+            <div className="jp2-mobile-auth-actions">
+              <Link
+                to="/login"
+                className="btn btn-outline-primary"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Log in
+              </Link>
+
+              <Link
+                to="/register"
+                className="btn btn-primary"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Get started
+              </Link>
+            </div>
+          )}
+        </div>
+      </div>
     </>
   );
 };

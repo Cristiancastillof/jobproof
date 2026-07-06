@@ -707,7 +707,7 @@ export const generatePDF = async (reportData = {}) => {
         ])
       : [["Team involved", "No team members listed."]];
 
-  y = addTwoColumnTable(
+  addTwoColumnTable(
     doc,
     "Team involved",
     "People attached to this job report.",
@@ -733,23 +733,37 @@ export const generatePDF = async (reportData = {}) => {
   const hasAfterPhotos =
     reportData.afterPhotos && reportData.afterPhotos.length > 0;
 
-  if (hasBeforePhotos) {
-    y = await addPhotoGrid(doc, "Before photos", reportData.beforePhotos, y);
-  }
+  if (hasBeforePhotos && hasAfterPhotos) {
+    const afterPhotosStartY = await addPhotoGrid(
+      doc,
+      "Before photos",
+      reportData.beforePhotos,
+      y
+    );
 
-  if (hasAfterPhotos) {
-    y = await addPhotoGrid(doc, "After photos", reportData.afterPhotos, y);
-  }
-
-  if (!hasBeforePhotos && !hasAfterPhotos) {
-    y = ensureSpace(doc, y, 32);
-    y = addSectionTitle(doc, "Photo evidence", null, y);
+    await addPhotoGrid(
+      doc,
+      "After photos",
+      reportData.afterPhotos,
+      afterPhotosStartY
+    );
+  } else if (hasBeforePhotos) {
+    await addPhotoGrid(doc, "Before photos", reportData.beforePhotos, y);
+  } else if (hasAfterPhotos) {
+    await addPhotoGrid(doc, "After photos", reportData.afterPhotos, y);
+  } else {
+    const photoSectionY = addSectionTitle(
+      doc,
+      "Photo evidence",
+      null,
+      ensureSpace(doc, y, 32)
+    );
 
     doc.setFillColor(...COLORS.white);
     doc.setDrawColor(...COLORS.border);
     doc.roundedRect(
       PAGE.margin,
-      y,
+      photoSectionY,
       PAGE.width - PAGE.margin * 2,
       22,
       3,
@@ -763,10 +777,8 @@ export const generatePDF = async (reportData = {}) => {
     doc.text(
       "No before or after photos were attached to this report.",
       PAGE.margin + 5,
-      y + 12
+      photoSectionY + 12
     );
-
-    y += 30;
   }
 
   const totalPages = doc.internal.getNumberOfPages();
