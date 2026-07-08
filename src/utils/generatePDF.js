@@ -142,6 +142,29 @@ const safeFileName = (value) => {
     .toLowerCase();
 };
 
+const getDownloadStamp = () => {
+  const date = new Date();
+  const pad = (value) => String(value).padStart(2, "0");
+
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds()),
+  ].join("");
+};
+
+const getReportPdfFileName = (reportData) => {
+  const reportNumber = safeFileName(reportData.reportNumber || "job-report");
+  const clientName = safeFileName(
+    reportData.clientDisplayName || reportData.clientName || "client"
+  );
+
+  return `${reportNumber}-${clientName}-${getDownloadStamp()}.pdf`;
+};
+
 const drawPageBackground = (doc) => {
   doc.setFillColor(...COLORS.pageBg);
   doc.rect(0, 0, PAGE.width, PAGE.height, "F");
@@ -322,7 +345,7 @@ const convertImageToDataUrl = async (imageUrl) => {
   try {
     const response = await fetch(imageUrl, {
       mode: "cors",
-      cache: "force-cache",
+      cache: "no-store",
     });
 
     if (!response.ok) return null;
@@ -788,7 +811,7 @@ export const generatePDF = async (reportData = {}) => {
     addPageFooter(doc, page, totalPages, reportData);
   }
 
-  const fileName = `${safeFileName(reportData.reportNumber || "job-report")}.pdf`;
+  const fileName = getReportPdfFileName(reportData);
 
   doc.save(fileName);
 };

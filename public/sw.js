@@ -1,4 +1,4 @@
-const CACHE_NAME = "jobproof-pwa-v4";
+const CACHE_NAME = "jobproof-pwa-v5-pdf-cache-fix";
 
 const STATIC_ASSETS = [
   "/",
@@ -46,22 +46,19 @@ self.addEventListener("fetch", (event) => {
   const requestUrl = new URL(request.url);
 
   if (requestUrl.origin !== self.location.origin) return;
+  if (requestUrl.pathname.startsWith("/api/")) return;
 
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
-        .then((networkResponse) => {
-          const responseClone = networkResponse.clone();
-
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put("/", responseClone);
-          });
-
-          return networkResponse;
-        })
         .catch(() => caches.match("/"))
     );
 
+    return;
+  }
+
+  if (request.destination === "document") {
+    event.respondWith(fetch(request));
     return;
   }
 
