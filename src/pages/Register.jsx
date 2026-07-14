@@ -397,6 +397,12 @@ const Register = () => {
                 ? "Create Account & Join Team"
                 : "Create Admin Account"}
             </button>
+
+            <p className="small text-muted text-center mt-3 mb-0">
+              By creating an account, you agree to the{" "}
+              <Link to="/terms">Terms</Link> and{" "}
+              <Link to="/privacy">Privacy Policy</Link>.
+            </p>
           </form>
         )}
 

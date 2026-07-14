@@ -12,11 +12,13 @@ Use this checklist before inviting real customers into JobProof.
 - [ ] `/api/stripe-webhook` rejects unsigned requests.
 - [ ] Mobile navigation is usable on iPhone Safari and Android Chrome.
 - [ ] Long forms do not hide save buttons behind the bottom menu.
+- [ ] Password reset email opens `/reset-password` and updates the password.
 
 ## Supabase
 
 - [ ] Project URL and anon key are configured in production.
 - [ ] Service role key is configured only as a server-side variable.
+- [ ] Auth redirect URLs include the production `/reset-password` URL.
 - [ ] Tables exist: `companies`, `profiles`, `clients`, `reports`,
       `report_photos`, `report_workers`, `report_activity`,
       `team_invitations`.
@@ -63,6 +65,8 @@ Use this checklist before inviting real customers into JobProof.
 
 - [ ] Domain and HTTPS are active.
 - [ ] `VITE_PUBLIC_APP_URL` points to the production domain.
+- [ ] `PUBLIC_APP_URL` points to the production domain for serverless APIs.
+- [ ] `VITE_SUPPORT_EMAIL` uses a real monitored support inbox.
 - [ ] Error monitoring is installed or hosting logs are actively checked.
 - [ ] Support email is visible to users.
 - [ ] Privacy policy and terms are available.

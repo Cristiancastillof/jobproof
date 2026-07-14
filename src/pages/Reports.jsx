@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import { supabase } from "../lib/supabaseClient";
 import { recordReportActivity } from "../utils/reportActivity";
 
@@ -150,7 +150,7 @@ const Reports = () => {
     );
   };
 
-  const loadReports = async () => {
+  const loadReports = useCallback(async () => {
     if (profileLoading) return;
 
     if (!user?.id || !profile?.company_id) {
@@ -205,11 +205,11 @@ const Reports = () => {
     } finally {
       setLoadingReports(false);
     }
-  };
+  }, [profile, profileLoading, user]);
 
   useEffect(() => {
     loadReports();
-  }, [user, profile, profileLoading]);
+  }, [loadReports]);
 
   const handleUpdateStatus = async (report, nextStatus) => {
     if (!canManageReports) {

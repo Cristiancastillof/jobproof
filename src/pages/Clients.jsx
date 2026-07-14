@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import { supabase } from "../lib/supabaseClient";
 import {
   getLimitLabel,
@@ -198,7 +198,7 @@ const Clients = () => {
     return clients.filter((client) => client.client_type === "site").length;
   }, [clients]);
 
-  const loadBillingState = async () => {
+  const loadBillingState = useCallback(async () => {
     if (!profile?.company_id || !canManageClients) {
       setLoadingBilling(false);
       setBillingPermissions(null);
@@ -246,9 +246,9 @@ const Clients = () => {
     } finally {
       setLoadingBilling(false);
     }
-  };
+  }, [canManageClients, profile]);
 
-  const loadClients = async () => {
+  const loadClients = useCallback(async () => {
     if (!profile?.company_id || !canManageClients) {
       setLoadingClients(false);
       return;
@@ -302,7 +302,7 @@ const Clients = () => {
     } finally {
       setLoadingClients(false);
     }
-  };
+  }, [canManageClients, profile]);
 
   useEffect(() => {
     if (profileLoading) return;
@@ -314,7 +314,7 @@ const Clients = () => {
 
     loadClients();
     loadBillingState();
-  }, [user, profile, profileLoading]);
+  }, [loadBillingState, loadClients, profileLoading, user?.id]);
 
   const handleChange = (event) => {
     const { name, value, type, checked } = event.target;

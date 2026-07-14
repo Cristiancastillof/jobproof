@@ -1,10 +1,17 @@
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
 body {
   background-color: #f4f6f8;
   color: #1f2933;
   margin: 0;
 }
 
-.app-wrapper {
+.app-wrapper,
+.app-container {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -5183,5 +5190,93 @@ textarea:focus::placeholder {
     width: 38px;
     height: 38px;
     border-radius: 13px;
+  }
+}
+
+.jp-footer {
+  color: #e2e8f0;
+  background: #0f172a;
+  padding: 18px 0;
+}
+
+.jp-footer .container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.jp-footer small {
+  font-weight: 650;
+}
+
+.jp-footer nav {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.jp-footer a {
+  color: #bfdbfe;
+  font-size: 0.88rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.jp-footer a:hover {
+  color: #ffffff;
+}
+
+.legal-page {
+  display: flex;
+  justify-content: center;
+}
+
+.legal-card {
+  width: min(100%, 880px);
+  color: #1f2937;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 18px;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+  padding: clamp(22px, 5vw, 44px);
+}
+
+.legal-card h1 {
+  margin-bottom: 8px;
+  color: #0f172a;
+  font-weight: 950;
+  letter-spacing: 0;
+}
+
+.legal-card h2 {
+  margin-top: 28px;
+  margin-bottom: 10px;
+  color: #111827;
+  font-size: 1.08rem;
+  font-weight: 900;
+}
+
+.legal-card p {
+  line-height: 1.7;
+}
+
+@media (max-width: 768px) {
+  .jp-footer {
+    padding-bottom: 98px;
+  }
+
+  .jp-footer .container {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .jp-footer nav {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .legal-card {
+    border-radius: 14px;
   }
 }

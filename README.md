@@ -31,12 +31,14 @@ Frontend:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 - `VITE_PUBLIC_APP_URL`
+- `VITE_SUPPORT_EMAIL`
 
 Serverless APIs:
 
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
+- `PUBLIC_APP_URL`
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
 
@@ -65,6 +67,10 @@ The app expects these public storage buckets:
 Row Level Security should be enabled so authenticated users can only access rows
 for their own `company_id`. Public report links should be readable only through
 their public token flow.
+
+Supabase Auth redirect URLs should include the production
+`https://YOUR_DOMAIN/reset-password` URL so password recovery links can return
+users to JobProof.
 
 ## Stripe Billing
 
@@ -102,6 +108,13 @@ The project is ready for Vercel-style deployment:
    routed to the SPA fallback.
 4. Configure the Stripe webhook URL after the production domain is live.
 5. Run the production QA checklist in `docs/production-launch-checklist.md`.
+
+## Account Recovery
+
+Password reset emails redirect users to `/reset-password`. In production,
+`VITE_PUBLIC_APP_URL` and `PUBLIC_APP_URL` should point to the final HTTPS
+domain, and the same `/reset-password` URL must be allow-listed in Supabase
+Auth settings.
 
 ## Checks
 

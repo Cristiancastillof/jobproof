@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import ReportForm from "../components/ReportForm";
 import ReportPreview from "../components/ReportPreview";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import { supabase } from "../lib/supabaseClient";
 import { calculateTotalHours } from "../utils/calculateTotalHours";
 import { generatePDF } from "../utils/generatePDF";
@@ -413,7 +413,7 @@ const CreateReport = () => {
   const saveButtonDisabled =
     savingReport || workerCannotEditCompletedReport || shouldBlockNewReportByBilling;
 
-  const normalizeSelectedWorkerIds = (workerIds = []) => {
+  const normalizeSelectedWorkerIds = useCallback((workerIds = []) => {
     const uniqueIds = Array.from(new Set(workerIds.filter(Boolean)));
 
     if (user?.id && !uniqueIds.includes(user.id)) {
@@ -421,9 +421,9 @@ const CreateReport = () => {
     }
 
     return uniqueIds;
-  };
+  }, [user]);
 
-  const loadActiveClients = async () => {
+  const loadActiveClients = useCallback(async () => {
     const { data, error } = await supabase
       .from("clients")
       .select(
@@ -458,7 +458,7 @@ const CreateReport = () => {
     setClients(loadedClients);
 
     return loadedClients;
-  };
+  }, [profile]);
 
   useEffect(() => {
     const loadCompanyAndReport = async () => {
@@ -690,7 +690,19 @@ const CreateReport = () => {
     };
 
     loadCompanyAndReport();
-  }, [id, isEditMode, user, profile, profileLoading, displayName]);
+  }, [
+    clientIdFromUrl,
+    displayName,
+    id,
+    isEditMode,
+    loadActiveClients,
+    normalizeSelectedWorkerIds,
+    profile,
+    profileLoading,
+    searchParams,
+    setSearchParams,
+    user,
+  ]);
 
   useEffect(() => {
     if (!user?.id || teamMembers.length === 0) return;
@@ -721,7 +733,13 @@ const CreateReport = () => {
       ...currentReportData,
       teamInvolved,
     }));
-  }, [selectedWorkerIds, teamMembers, user?.id, reportData.createdBy]);
+  }, [
+    normalizeSelectedWorkerIds,
+    selectedWorkerIds,
+    teamMembers,
+    user?.id,
+    reportData.createdBy,
+  ]);
 
   const handleSelectClient = (clientId) => {
     if (!clientId) {

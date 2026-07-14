@@ -3,7 +3,7 @@ import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import ProtectedRoute from "./components/ProtectedRoute";
 import PublicRoute from "./components/PublicRoute";
-import { useAuth } from "./context/AuthContext";
+import { useAuth } from "./context/useAuth";
 
 import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
@@ -17,6 +17,10 @@ import Team from "./pages/Team";
 import Clients from "./pages/Clients";
 import PublicReport from "./pages/PublicReport";
 import Billing from "./pages/Billing";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
 
 const HomeRoute = () => {
   const { isAuthenticated, authLoading } = useAuth();
@@ -46,6 +50,10 @@ const App = () => {
 
           <Route path="/reports/client/:token" element={<PublicReport />} />
 
+          <Route path="/privacy" element={<Privacy />} />
+
+          <Route path="/terms" element={<Terms />} />
+
           <Route
             path="/login"
             element={
@@ -63,6 +71,17 @@ const App = () => {
               </PublicRoute>
             }
           />
+
+          <Route
+            path="/forgot-password"
+            element={
+              <PublicRoute>
+                <ForgotPassword />
+              </PublicRoute>
+            }
+          />
+
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           <Route
             path="/business-profile"

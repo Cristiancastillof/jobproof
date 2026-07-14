@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import ReportPreview from "../components/ReportPreview";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import { supabase } from "../lib/supabaseClient";
 import {
   buildClientReportMailtoLink,
@@ -402,7 +402,7 @@ const ReportDetails = () => {
     );
   }, [reportData]);
 
-  const loadReportDetails = async () => {
+  const loadReportDetails = useCallback(async () => {
     if (profileLoading) return;
 
     if (!user?.id || !profile?.company_id) {
@@ -512,11 +512,11 @@ const ReportDetails = () => {
     } finally {
       setLoadingReport(false);
     }
-  };
+  }, [displayName, id, profile, profileLoading, user]);
 
   useEffect(() => {
     loadReportDetails();
-  }, [id, user, profile, profileLoading, displayName]);
+  }, [loadReportDetails]);
 
   const refreshActivity = async () => {
     if (!reportData?.id || !profile?.company_id) return;

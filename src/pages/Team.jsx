@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 import { supabase } from "../lib/supabaseClient";
 
 const createEmptyInviteForm = () => ({
@@ -80,7 +80,7 @@ const Team = () => {
     return teamMembers.filter((member) => !member.active);
   }, [teamMembers]);
 
-  const loadTeamMembers = async () => {
+  const loadTeamMembers = useCallback(async () => {
     if (!profile?.company_id || !isAdmin) return;
 
     const { data, error } = await supabase
@@ -94,9 +94,9 @@ const Team = () => {
     }
 
     setTeamMembers(data || []);
-  };
+  }, [isAdmin, profile]);
 
-  const loadInvitations = async () => {
+  const loadInvitations = useCallback(async () => {
     if (!profile?.company_id || !isAdmin) return;
 
     const { data, error } = await supabase
@@ -123,9 +123,9 @@ const Team = () => {
     }
 
     setInvitations(data || []);
-  };
+  }, [isAdmin, profile]);
 
-  const loadTeam = async () => {
+  const loadTeam = useCallback(async () => {
     if (!profile?.company_id || !isAdmin) {
       setLoadingTeam(false);
       return;
@@ -146,7 +146,7 @@ const Team = () => {
     } finally {
       setLoadingTeam(false);
     }
-  };
+  }, [isAdmin, loadInvitations, loadTeamMembers, profile]);
 
   useEffect(() => {
     if (profileLoading) return;
@@ -157,7 +157,7 @@ const Team = () => {
     }
 
     loadTeam();
-  }, [user, profile, profileLoading]);
+  }, [loadTeam, profileLoading, user?.id]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
